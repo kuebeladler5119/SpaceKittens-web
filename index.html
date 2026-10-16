@@ -1,0 +1,920 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#071329" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Space Kittens" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="description" content="Space Kittens – baue mit Astronauten-Kätzchen eine Kolonie im All." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="assets/icon-192.png" />
+    <title>Space Kittens</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell" id="appShell">
+      <header class="topbar">
+        <div class="brand">
+          <img class="brand-kitten" id="brandKitten" alt="" width="40" height="40" />
+          <div><strong>SPACE</strong><small>KITTENS</small></div>
+        </div>
+        <div class="topbar-actions">
+          <button class="gem-balance" id="gemsButton" aria-label="Shop öffnen">
+            <span>◆</span><b id="gems">25</b><i>+</i>
+          </button>
+          <button class="settings-button" id="settingsButton" aria-label="Einstellungen">⚙</button>
+          <button class="settings-button menu-button" id="menuButton" aria-label="Mehr: Lichtzyklus, Shop, Looks, Einstellungen" aria-haspopup="dialog">☰</button>
+        </div>
+      </header>
+
+      <section class="resource-panel">
+        <div class="resource-main">
+          <span class="ore-icon">◈</span>
+          <div><small>COSMIC CREDITS</small><strong id="credits">0</strong></div>
+        </div>
+        <div class="income"><small>PRO SEKUNDE</small><strong id="incomeRate">+0</strong></div>
+      </section>
+      <section class="mini-resources">
+        <div>⬡ <b id="ore">0</b><small>Erz</small></div>
+        <div>◆ <b id="crystals">0</b><small>Kristalle</small></div>
+        <div>⛽ <b id="fuel">0</b><small>Treibstoff</small></div>
+        <div class="alloy-resource">▰ <b id="alloys">0</b><small>Legierungen</small></div>
+        <button id="dailyButton" class="daily-button">☀<b>Daily</b><small id="dailyStatus">bereit</small></button>
+      </section>
+
+      <section class="status-row">
+        <button class="status-card" data-screen="crew">
+          <span>☄</span>
+          <div><small>SEKTOR</small><b id="sector">Aurora-7</b></div>
+        </button>
+        <button class="status-card" data-screen="crew">
+          <span>♙</span>
+          <div><small>CREW</small><b id="crewLevel">0 / 4</b></div>
+        </button>
+        <button class="status-card" data-screen="prestige">
+          <span>✧</span>
+          <div><small>STERNENSTAUB</small><b id="stardust">0</b></div>
+        </button>
+      </section>
+
+      <section class="screen active" id="home">
+        <div class="hero-card hero-art" id="heroCard">
+          <div class="space-depth" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="planet planet-a">
+            <i class="planet-cloud cloud-one"></i><i class="planet-cloud cloud-two"></i>
+          </div>
+          <div class="planet-rings" aria-hidden="true"><i></i></div>
+          <div class="planet planet-b"></div>
+          <div class="asteroid-field" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <div class="planet-weather" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="stars">✦ · ✧ · ✦</div>
+          <div class="ambient-mining" id="ambientMining" aria-hidden="true"></div>
+          <div class="planet-development" id="planetDevelopment" aria-hidden="true"></div>
+          <div class="storage-depot" id="storageDepot" aria-hidden="true"></div>
+          <div class="sector-visual" id="sectorVisual" aria-hidden="true"></div>
+          <div class="scene-event" id="sceneEvent" aria-hidden="true"></div>
+          <div class="space-traffic" id="spaceTraffic" aria-hidden="true"></div>
+          <div class="drone-swarm" id="droneSwarm" aria-hidden="true"></div>
+          <div class="mining-rig" id="miningRig" aria-hidden="true">
+            <i class="rig-base"></i><i class="rig-arm"></i><i class="rig-drill"></i><i class="rig-light"></i>
+          </div>
+          <div class="hero-copy">
+            <span id="planetType">KRISTALLPLANET</span>
+            <h1 id="planetName">Kristallfeld<br />Orion</h1>
+            <p id="planetDescription">Deine Drohnen fördern automatisch.</p>
+          </div>
+          <b class="scene-status" id="sceneStatus" role="status"></b>
+          <button class="mochi-focus" id="mochiFocus" aria-label="Zu Mochi">🐾 Mochi</button>
+          <button class="mine-toggle" id="mineToggle" aria-label="In die Mine" hidden>⛏ Mine</button>
+          <div class="mine-hud" id="mineHud" hidden>
+            <div class="mine-top">
+              <button id="mineBack" aria-label="Zur Oberfläche">←<span> Oberfläche</span></button><b id="mineTitle"><span id="mineTitleText">Mine</span><small id="mineCredits">◈ 0</small></b><button id="mineOverviewBtn" aria-label="Minen-Übersicht">☰<span> Übersicht</span></button>
+            </div>
+            <div class="mine-sub">
+              <button class="mine-bottleneck" id="mineBottleneck" role="status"></button>
+              <div class="mine-nav">
+                <button data-mine-jump="top" aria-label="Nach oben">⤒</button><button data-mine-jump="deepest" aria-label="Tiefster Schacht">⤓</button><button data-mine-jump="construction" aria-label="Zur Baustelle">🚧</button><button data-mine-jump="bottleneck" aria-label="Zum Engpass">⚠</button><button data-mine-zone aria-label="Nächste Zone">◫</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <nav class="district-nav" id="districtNav" aria-label="Distrikte der Kolonie" hidden></nav>
+        <button class="objective-card" id="objectiveCard" data-screen="home">
+          <span id="objectiveIcon">⛏</span>
+          <div>
+            <small>NÄCHSTER SCHRITT</small><b id="objectiveTitle">Sternenbohrer ausbauen</b>
+            <p id="objectiveText">Erreiche Stufe 3 für sichtbar mehr Förderung.</p>
+          </div>
+          <em id="objectiveAction">FARM ›</em>
+        </button>
+        <button class="season-card" id="seasonCard">
+          <span>✧</span>
+          <div>
+            <small id="seasonCardTag">STERNENROUTE</small><b id="seasonCardTitle">Saison</b>
+            <i class="season-mini"><em id="seasonCardFill"></em></i>
+          </div>
+          <em id="seasonCardAction">ÖFFNEN ›</em>
+        </button>
+        <section class="contract-panel hidden" id="contractPanel">
+          <div class="section-heading">
+            <div>
+              <span>MITTELSEKTOR-AUFTRÄGE</span>
+              <h2 id="contractChainTitle">Routenprotokoll</h2>
+            </div>
+            <b id="contractProgress">0 / 2</b>
+          </div>
+          <p id="contractChainText">Verbinde bestehende Systeme für dauerhafte Vorteile.</p>
+          <div class="contract-list" id="contractList"></div>
+          <p class="synergy-note" id="synergyNote"></p>
+        </section>
+        <section class="pipeline-card" aria-label="Produktionsfluss des aktiven Planeten">
+          <div class="pipeline-heading"><span>LIVE-PRODUKTION</span><b id="pipelineStatus">AUSGEWOGEN</b></div>
+          <div class="pipeline-stages">
+            <div><small>FÖRDERUNG</small><b id="extractRate">0 Erz/s</b></div>
+            <i>→</i>
+            <div><small>LAGER</small><b id="storageValue">0 / 0</b></div>
+            <i>→</i>
+            <div><small>TRANSPORT</small><b id="transportRate">0 Erz/s</b></div>
+          </div>
+          <div class="storage-meter"><i id="storageFill"></i></div>
+          <p id="pipelineHint">Deine Förderdrohnen beliefern die Frachter.</p>
+        </section>
+        <section class="planet-command" id="planetCommand">
+          <div class="section-heading">
+            <div>
+              <span>PLANETENENTWICKLUNG</span>
+              <h2 id="developmentTitle">Kleine Abbaustation</h2>
+            </div>
+            <b id="developmentStage">STUFE 1</b>
+          </div>
+          <p id="developmentText">Investiere in die lokale Infrastruktur, um eine Spezialisierung freizuschalten.</p>
+          <div class="specialization-list" id="specializationList"></div>
+        </section>
+        <section class="planet-panel">
+          <div class="section-heading">
+            <div>
+              <span>ERKUNDUNG</span>
+              <h2>Planetenroute</h2>
+            </div>
+            <b id="planetCount">1 / 4</b>
+          </div>
+          <div class="planet-list" id="planetList"></div>
+          <button class="survey-button" id="surveyButton">NÄCHSTEN PLANETEN SCANNEN</button>
+        </section>
+
+        <div class="section-heading">
+          <div>
+            <span>FARM</span>
+            <h2>Produktionslinie</h2>
+          </div>
+          <button class="tiny-button" id="boostButton">⚡ Boost</button>
+        </div>
+        <div class="production-list" id="productionList"></div>
+        <article class="fab-card" id="fabCard" aria-label="Raffinerie-Zentrale" hidden></article>
+        <section class="research-panel hidden" id="researchPanel">
+          <div class="section-heading">
+            <div>
+              <span>FORSCHUNG</span>
+              <h2>Orbitallabor</h2>
+            </div>
+            <b>NEU</b>
+          </div>
+          <div class="research-list" id="researchList"></div>
+        </section>
+        <article class="event-card hidden" id="eventCard">
+          <span class="event-icon" id="eventIcon">✦</span>
+          <div>
+            <small>SEKTOR-EREIGNIS</small>
+            <h3 id="eventTitle">Mineralienboom</h3>
+            <p id="eventText"></p>
+            <em id="eventEffect"></em>
+          </div>
+          <button id="eventAction">ANNEHMEN</button><button id="eventIgnore">×</button>
+        </article>
+        <div class="section-heading quest-heading">
+          <div>
+            <span>KAPITEL 1</span>
+            <h2>Kommandanten-Aufträge</h2>
+          </div>
+          <b id="questProgress">0 / 3</b>
+        </div>
+        <div class="quest-list" id="questList"></div>
+        <div class="offline-note">☾ Dein Fortschritt wird automatisch gespeichert. Offline-Ertrag aktiv.</div>
+      </section>
+
+      <section class="screen" id="trade">
+        <div class="page-title">
+          <span>GALAXIE · HANDEL</span>
+          <h1>Sternenbasar</h1>
+          <p>Echte Ware aus deinen Kolonien gegen Credits, Aufträge und Frachtrouten.</p>
+        </div>
+        <nav class="section-jumps" aria-label="Abschnitte im Galaxie-Tab"><button data-jump="galaxyIncome">Einkommen</button><button data-jump="goodsGrid">Waren</button><button data-jump="traderPanel">Händler</button><button data-jump="bazaarContracts">Aufträge</button><button data-jump="freightPanel">Fracht</button><button data-jump="tradeList">Rohstoffmarkt</button></nav>
+        <article class="arsenal-card challenge-card galaxy-income" id="galaxyIncome" aria-label="Galaxie-Einkommen" hidden></article>
+        <article class="merchant-card" id="merchantCard"></article>
+        <div class="section-heading achievement-heading">
+          <div><span>WAREN AUS <em id="goodsColony">ORION</em></span><h2>Lagerbestand</h2></div>
+        </div>
+        <div class="goods-grid" id="goodsGrid"></div>
+        <div class="section-heading achievement-heading">
+          <div><span>EINKAUF · FERTIGWAREN</span><h2>Versorgungshändler</h2></div>
+        </div>
+        <div class="trader-panel" id="traderPanel"></div>
+        <div class="section-heading achievement-heading">
+          <div><span>MINKAS AUFTRÄGE</span><h2>Lieferaufträge</h2></div>
+          <b id="contractCount">0 / 3</b>
+        </div>
+        <div class="bazaar-contracts" id="bazaarContracts"></div>
+        <div class="section-heading achievement-heading">
+          <div><span>INTERPLANETAR</span><h2>Frachtrouten</h2></div>
+          <b id="routeCount">0 / 6</b>
+        </div>
+        <div class="freight-panel" id="freightPanel"></div>
+        <div class="section-heading achievement-heading">
+          <div><span>ERZ-LIEFERUNGEN</span><h2>Rohstoffmarkt</h2></div>
+        </div>
+        <div class="market-alert" id="marketAlert">↗ <b>Orion-Kristalle</b> sind heute besonders gefragt.</div>
+        <div class="trade-list" id="tradeList"></div>
+        <article class="expedition-card">
+          <div class="expedition-art"><img class="ship-preview-live" alt="Dein Schiff" /></div>
+          <div>
+            <span id="expeditionStatus">KURZMISSION · 2 MIN</span>
+            <h2>Echo im Kometengürtel</h2>
+            <p>Finde Kristalle und Vorräte für die Kolonie.</p>
+            <button id="expeditionButton">EXPEDITION STARTEN · ⛽ 5</button>
+            <button class="ad-button hidden" id="expeditionSkip">▶ SOFORT BEENDEN</button>
+          </div>
+        </article>
+        <section class="sector-panel hidden" id="sectorPanel">
+          <div class="section-heading">
+            <div>
+              <span>TIEFER RAUM</span>
+              <h2>Sektor-Kartografie</h2>
+            </div>
+            <b id="sectorProgress">0 / 3</b>
+          </div>
+          <p class="sector-intro">Erstelle Scanprofile, entsende Expeditionen und sichere langfristige Routenboni.</p>
+          <div class="sector-list" id="sectorList"></div>
+        </section>
+        <section class="gate-card hidden" id="gateCard">
+          <div class="gate-symbol">◌</div>
+          <div>
+            <span>MEGASTRUKTUR</span>
+            <h2 id="gateTitle">Sprungtor-Baustelle</h2>
+            <p id="gateText">Fernsektoren verlangen eine stabile Interstellarinfrastruktur.</p>
+            <div class="gate-meter"><i id="gateFill"></i></div>
+          </div>
+          <button id="gateButton">BAUPHASE STARTEN</button>
+        </section>
+        <article class="spinner-card">
+          <div>
+            <span>KOSTENLOSER TAGES-SCAN</span>
+            <h2>Signal-Scanner</h2>
+            <p>Eine planbare Gratis-Belohnung jede Stunde.</p>
+          </div>
+          <button id="spinButton">✦ SCANNEN</button>
+          <button class="ad-button hidden" id="spinRefill">▶ AUFLADEN</button>
+        </article>
+        <section class="faction-panel hidden" id="factionPanel">
+          <div class="section-heading">
+            <div>
+              <span>BEGEGNUNGEN</span>
+              <h2>Fraktionskanal</h2>
+            </div>
+            <b>REPUTATION</b>
+          </div>
+          <div class="faction-list" id="factionList"></div>
+        </section>
+        <section class="territory-panel hidden" id="territoryPanel">
+          <div class="section-heading">
+            <div>
+              <span>STRATEGISCHE GEBIETE</span>
+              <h2>Grenzkarte</h2>
+            </div>
+            <b id="territoryStatus">0 / 6</b>
+          </div>
+          <p class="territory-intro" id="territoryGoal">Sichere zuerst eine Route in den tiefen Raum.</p>
+          <div class="territory-list" id="territoryList"></div>
+        </section>
+        <article class="strategic-event hidden" id="strategicEvent">
+          <span class="strategic-event-icon" id="strategicEventIcon">⚠</span>
+          <div>
+            <small id="strategicEventTag">STRATEGISCHES EREIGNIS</small>
+            <h2 id="strategicEventTitle">Grenzkonflikt</h2>
+            <p id="strategicEventText"></p>
+            <em id="strategicEventBonus"></em>
+            <div class="strategic-event-actions" id="strategicEventActions"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="screen" id="battle">
+        <div class="page-title">
+          <span id="battleKicker">SEKTOR-VERTEIDIGUNG</span>
+          <h1 id="battleTitle">Piratenalarm</h1>
+          <p>Besiege Gegner für Baupläne und Credits.</p>
+        </div>
+        <article class="story-card hidden" id="storyCard" aria-live="polite"></article>
+        <article class="enemy-card" id="enemyCard">
+          <div class="enemy-art" id="enemyArt">☠<span>✦</span></div>
+          <div class="combat-hud" id="combatHud">
+            <div class="hud-enemy">
+              <div class="enemy-title">
+                <div>
+                  <small><i id="enemyRank">STUFE</i> <b id="enemyLevel">1</b></small>
+                  <h2 id="enemyName">Staub-Pirat</h2>
+                </div>
+                <b class="reward">+<span id="battleReward">100</span> ◈</b>
+              </div>
+              <div class="health"><i id="enemyHealth"></i><u id="enemyPhaseMark"></u><b id="enemyHealthText">100 / 100</b></div>
+              <div class="hud-tags" id="enemyTags"></div>
+            </div>
+            <div class="hud-player" id="hudPlayer"></div>
+          </div>
+          <div class="combat-info">
+            <p class="combat-readout" id="combatHint">Taktikdaten werden geladen.</p>
+            <p class="combo-text" id="comboText">Kette starten · schnelle Treffer geben bis zu +20% Schaden</p>
+            <p class="drop-preview" id="dropPreview">Möglicher Drop: Credits, Erz und Ausrüstung</p>
+          </div>
+        </article>
+        <article class="arsenal-card challenge-card campaign-card" id="campaignCard" aria-label="Feldzug" hidden></article>
+        <article class="arsenal-card" id="arsenalCard" aria-label="Arsenal"></article>
+        <article class="arsenal-card challenge-card" id="challengeCard" aria-label="Sektorprüfungen" hidden></article>
+        <article class="ship-card workshop" id="workshop">
+          <div class="workshop-head">
+            <span>WERFT · DEIN KAMPFSCHIFF</span>
+            <h2 id="shipName">Horizon Mk.<b id="shipLevel">1</b></h2>
+            <p id="shipDescription">Ausgewogenes Schiff für jede Mission.</p>
+          </div>
+          <div class="workshop-stage" id="workshopStage"></div>
+          <div class="workshop-detail" id="workshopDetail"></div>
+          <h3 class="workshop-label">MODULE</h3>
+          <div class="ship-upgrades">
+            <div class="upgrade-row" data-preview-upgrade="weapon"><i>⚔</i><div><b>Waffen <em id="weaponLevel"></em></b><small id="weaponDelta"></small></div><button data-ship="weapon"><b id="weaponCost">0</b></button></div>
+            <div class="upgrade-row" data-preview-upgrade="hull"><i>⬡</i><div><b>Hülle <em id="hullLevel"></em></b><small id="hullDelta"></small></div><button data-ship="hull"><b id="hullCost">0</b></button></div>
+            <div class="upgrade-row" data-preview-upgrade="engine"><i>➤</i><div><b>Antrieb <em id="engineLevel"></em></b><small id="engineDelta"></small></div><button data-ship="engine"><b id="engineCost">0</b></button></div>
+            <div class="upgrade-row" data-preview-upgrade="core"><i>◆</i><div><b>Gem-Kern <em id="coreLevel"></em></b><small id="coreDelta"></small></div><button data-ship="core"><b id="coreCost">0</b></button></div>
+          </div>
+          <h3 class="workshop-label">AUSBAU · AUS DER FERTIGUNG</h3>
+          <div class="ship-refits" id="shipRefits"></div>
+          <h3 class="workshop-label">SCHIFFSMODELLE</h3>
+          <div class="ship-models" id="shipModels">
+            <button data-preview-model="Horizon"><img alt="" /><b>Horizon</b><small>Standard</small></button
+            ><button data-preview-model="Comet"><img alt="" /><b>Comet</b><small>◈ 1.500</small></button
+            ><button data-preview-model="Aegis"><img alt="" /><b>Aegis</b><small>◆ 10</small></button
+            ><button data-preview-model="Vanguard"><img alt="" /><b>Vanguard</b><small>2 Bosse</small></button
+            ><button data-preview-model="Corsair"><img alt="" /><b>Corsair</b><small>◈ 4.500</small></button
+            ><button data-preview-model="Pioneer"><img alt="" /><b>Pioneer</b><small>◆ 12</small></button>
+          </div>
+          <h3 class="workshop-label">WAFFENSYSTEME</h3>
+          <div class="weapon-types" id="weaponTypes">
+            <button data-preview-weapon="Laser"><i class="wpn-dot"></i><b>Laser</b><small>Standard</small></button
+            ><button data-preview-weapon="Plasma"><i class="wpn-dot"></i><b>Plasma</b><small>◈ 750</small></button
+            ><button data-preview-weapon="Arc"><i class="wpn-dot"></i><b>Arc</b><small>◆ 8</small></button
+            ><button data-preview-weapon="Ion"><i class="wpn-dot"></i><b>Ion</b><small>◈ 2.200</small></button
+            ><button data-preview-weapon="Nova"><i class="wpn-dot"></i><b>Nova</b><small>◆ 15</small></button>
+          </div>
+          <p class="weapon-effect" id="weaponEffect">Laser: verlässlicher Basisschaden</p>
+          <h3 class="workshop-label">GALAKTISCHE DNA · BORDWAFFE</h3>
+          <div class="dna-weapons" id="dnaWeapons"></div>
+        </article>
+        <article class="info-card">
+          <span>⚔</span>
+          <div>
+            <b>Automatische Verteidigung</b>
+            <p>Mit Boba (Verteidigung) im aktiven Dienst feuert AUTO jede Sekunde einen Schuss.</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="screen" id="crew">
+        <div class="page-title">
+          <span>KÄTZCHEN-KOMMANDO</span>
+          <h1>Kätzchen-Crew</h1>
+          <p>Jedes Kätzchen ist Spezialist – kombiniere sie für Build-Boni.</p>
+        </div>
+        <article class="crew-command-card">
+          <div>
+            <span>AKTIVE KOMMANDO-SLOTS</span>
+            <h2 id="crewSlots">0 / 2</h2>
+            <p id="crewBuildNote">Wähle Spezialisten passend zu deinem aktuellen Ziel.</p>
+          </div>
+          <button id="crewSlotButton">SLOT FREISCHALTEN</button>
+        </article>
+        <div class="crew-synergy" id="crewSynergy">KEINE CREW-SYNERGIE AKTIV</div>
+        <div class="crew-list" id="crewList"></div>
+        <div class="section-heading achievement-heading" id="managerOffice">
+          <div><span>MANAGER-BÜRO</span><h2>Spezialisten</h2></div>
+          <b id="specialistCount">0 / 7</b>
+        </div>
+        <p class="office-note">
+          Normale Manager stellst du direkt am Gebäude ein. Spezialisten sammelst du kostenlos über Talent-Kapseln – sie
+          arbeiten nur in ihrem Beruf, dafür besser.
+        </p>
+        <article class="talent-card" id="talentCard"></article>
+        <div class="manager-filter" id="managerFilter" role="tablist"></div>
+        <div class="manager-grid" id="managerGrid"></div>
+        <div class="manager-detail" id="managerDetail"></div>
+        <div class="section-heading achievement-heading">
+          <div><span>MOCHIS LOGBUCH</span><h2>Geschichte</h2></div>
+          <b id="journalCount">0</b>
+        </div>
+        <div class="journal-list" id="journalList"></div>
+        <div class="section-heading achievement-heading">
+          <div>
+            <span>FUNDSTÜCKE</span>
+            <h2>Inventar</h2>
+          </div>
+          <b id="inventoryCount">0 / 30</b>
+        </div>
+        <div class="item-bonuses" id="itemBonuses"></div>
+        <p class="item-archive" id="itemArchive">ARTEFAKT-ARCHIV · 0 Fundarten entdeckt</p>
+        <div class="inventory-list" id="inventoryList"></div>
+        <div class="section-heading achievement-heading">
+          <div>
+            <span>LOGBUCH</span>
+            <h2>Meilensteine</h2>
+          </div>
+          <b id="achievementCount">0 / 10</b>
+        </div>
+        <div class="achievement-list" id="achievementList"></div>
+      </section>
+
+      <section class="screen" id="prestige">
+        <div class="page-title">
+          <span>NEUER STERNZYKLUS</span>
+          <h1>Galaxie verkaufen</h1>
+          <p>Übergib deine Kolonie der Föderation und gründe eine stärkere neue Galaxie.</p>
+        </div>
+        <article class="prestige-card">
+          <div class="prestige-orbit">✧</div>
+          <small>BEI VERKAUF ERHALTEN</small><strong id="prestigeGain">0</strong><span>Sternenstaub</span
+          ><button id="prestigeButton">GALAXIE VERKAUFEN</button>
+          <p id="prestigeAdvice">Neue Galaxien starten mit dauerhaften Produktionsboni.</p>
+        </article>
+        <div class="upgrade-grid" id="starUpgradeList"></div>
+        <div class="section-heading achievement-heading" id="academySection">
+          <div><span>DAUERHAFT · GEMS</span><h2>Sternenakademie</h2></div>
+          <b id="academyGems">0 ◆</b>
+        </div>
+        <p class="office-note">
+          Bleibt für immer – auch nach dem Galaxie-Verkauf. Nur Komfort und Planung: Automatisierung bekommst du immer mit
+          Credits.
+        </p>
+        <div class="academy-grid" id="academyGrid"></div>
+      </section>
+
+      <div class="building-sheet hidden" id="buildingSheet" role="dialog" aria-label="Gebäude"></div>
+      <section class="action-dock" id="actionDock" aria-label="Produktion">
+        <div class="dock-summary" id="dockSummary">
+          <b id="chainAuto">0/3 automatisch</b><span><em id="planetOutput">0</em> ◈/s</span><small id="dockHint"></small>
+          <button class="dock-toggle" id="dockToggle" aria-expanded="true">HANDBETRIEB ▾</button>
+        </div>
+        <div class="production-chain" aria-label="Produktionskette">
+          <button class="collect-button chain-step" id="collectButton">
+            <span>⛏</span><b>ABBAUEN</b><small>+<em id="tapValue">10</em></small><i id="mineMode">Handarbeit</i>
+          </button>
+          <button class="chain-step" id="cartButton" data-manual="rail">
+            <span>🛒</span><b>LORE</b><small id="pileValue">Halde 0</small><i class="chain-fill"><u id="pileFill"></u></i><em id="railMode">Handarbeit</em>
+          </button>
+          <button class="chain-step" id="sellButton" data-manual="stall">
+            <span>◈</span><b>VERKAUF</b><small id="depotValue">Lager 0</small><i class="chain-fill"><u id="depotFill"></u></i><em id="stallMode">Handarbeit</em>
+          </button>
+        </div>
+      </section>
+      <section class="action-dock mine-dock" id="mineDock" aria-label="Mine">
+        <div class="dock-summary">
+          <b id="mineDockAuto">0/1 automatisch</b><span><em id="mineDockRate">0</em>/s nach oben</span><small id="mineDockHint"></small>
+        </div>
+        <div class="production-chain" aria-label="Minenkette">
+          <button class="chain-step collect-button" id="mineDigButton">
+            <span>⛏</span><b>ABBAUEN</b><small id="mineDigLabel">Schacht 1</small><i class="chain-fill"><u id="mineDigFill"></u></i><em id="mineDigMode">Handarbeit</em>
+          </button>
+          <button class="chain-step" id="mineLiftButton">
+            <span>⇕</span><b>AUFZUG</b><small id="mineLiftLabel">–</small><i class="chain-fill"><u id="mineLiftFill"></u></i><em id="mineLiftMode">Handarbeit</em>
+          </button>
+          <button class="chain-step" id="mineCartButton">
+            <span>🛒</span><b>LORE</b><small id="mineCartLabel">Halde 0</small><i class="chain-fill"><u id="mineCartFill"></u></i><em id="mineCartMode">Handarbeit</em>
+          </button>
+        </div>
+      </section>
+      <section class="combat-dock" id="combatDock" aria-label="Kampf">
+        <div class="taktband-dock" id="taktbandDock" hidden></div>
+        <div class="taktband-dock bloom-dock" id="bloomDock" hidden></div>
+        <div class="taktband-dock challenge-dock" id="challengeDock" hidden></div>
+        <div class="taktband-dock challenge-dock wave-dock" id="waveDock" hidden></div>
+        <div class="combat-actions">
+          <button class="combat-action" id="aimButton">◉ ZIELMODUS</button
+          ><button class="combat-action" id="overchargeButton">⚡ OVERCHARGE</button
+          ><button class="combat-action" id="autoBattleButton">AUTO: AUS</button>
+        </div>
+        <div class="attack-row">
+          <button class="battle-button" id="battleButton">
+            <span>ANGREIFEN</span><em id="attackState"></em><small>Schaden <b id="attackPower">8</b></small>
+          </button
+          ><button class="cat-ability" id="catButton" hidden aria-label="Funkenhagel"><i aria-hidden="true"></i><b>HAGEL</b><small>Bereit</small></button>
+        </div>
+        <b id="autoDamage" hidden></b>
+      </section>
+      <nav class="bottom-nav">
+        <button class="nav-item active" data-screen="home"><span>⌂</span><b>Kolonie</b></button>
+        <button class="nav-item" data-screen="trade"><span>⇄</span><b>Galaxie</b></button>
+        <button class="nav-item" data-screen="battle"><span>⚔</span><b>Abenteuer</b></button>
+        <button class="nav-item" data-screen="crew"><span>♙</span><b>Kätzchen</b></button>
+      </nav>
+    </main>
+    <!-- Beta 1.5: fullscreen expeditions (prep → fight → result), above the app; expedition-ui.js -->
+    <section class="expedition" id="expedition" role="dialog" aria-modal="true" aria-label="Expedition" data-state="closed" hidden>
+      <div class="exp-prep" id="expPrep"></div>
+      <div class="exp-fight">
+        <header class="exp-top" id="expTop"></header>
+        <div class="exp-stage" id="expStage"></div>
+        <footer class="exp-bottom" id="expBottom"></footer>
+        <div class="exp-pause-menu" id="expPauseMenu" hidden>
+          <div><b>Pause</b><small>Die Expedition steht still. Ausrüstung ist für diese Welle festgelegt.</small><button class="exp-start" data-exp-resume>WEITER</button><button class="exp-secondary" data-exp-retreat>RÜCKZUG</button></div>
+        </div>
+      </div>
+      <div class="exp-result" id="expResult"></div>
+    </section>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="modal hidden" id="introModal">
+      <div class="modal-box intro-box">
+        <span id="introStep">KAPITEL 1 · 1/3</span>
+        <div class="intro-portrait"><img id="introKitten" alt="Mochi" width="96" height="96" /></div>
+        <h2 id="introTitle">Ein Signal im Staub</h2>
+        <p id="introText">
+          Kommandant, ich bin Nova. Nach dem Sternensturm ist Aurora-7 unsere letzte Chance. Fördere Erz, damit wir die
+          Kolonie wieder aufbauen können.
+        </p>
+        <button id="introNext">WEITER</button
+        ><button id="introSkip" class="text-button">Einführung überspringen</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="dailyModal">
+      <div class="modal-box reward-box">
+        <button class="close-daily">×</button><span>TÄGLICHE VERSORGUNG</span>
+        <h2>Tag <b id="dailyDay">1</b></h2>
+        <div class="reward-orb">✦</div>
+        <p>Deine Crew hat Vorräte bereitgestellt.</p>
+        <button id="claimDaily">BELOHNUNG ABHOLEN</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="shopModal" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
+      <div class="modal-box shop-box">
+        <button class="modal-close" data-close-modal="shopModal" aria-label="Schließen">×</button>
+        <span>GALAXIE-VAULT</span>
+        <h2 id="shopTitle">Shop</h2>
+        <div class="shop-balance"><span>◆</span><b id="shopGems">0</b> Gems <small id="shopTokens"></small></div>
+        <div class="shop-tabs" role="tablist">
+          <button role="tab" data-shop-tab="style">Looks</button>
+          <button role="tab" data-shop-tab="sets">Sets</button>
+          <button role="tab" data-shop-tab="chests">Kisten</button>
+          <button role="tab" data-shop-tab="boost" class="active">Komfort</button>
+          <button role="tab" data-shop-tab="offers">Echtgeld</button>
+        </div>
+        <div class="shop-panel" id="shopPanel"></div>
+        <p class="shop-legal" id="shopLegal">
+          Alle Inhalte sind ohne Kauf erspielbar oder rein kosmetisch. Keine Zufallsboxen. Preise inkl. MwSt.,
+          Abwicklung über Google Play.
+        </p>
+        <button class="text-button" id="restorePurchases">Käufe wiederherstellen</button>
+        <div class="dev-panel hidden" id="devPanel">
+          <b>ENTWICKLER-TESTS (nur lokal)</b>
+          <button id="freeGems">+25 Test-Gems</button>
+          <button id="devCompletePending">Ausstehende Käufe abschließen</button>
+          <button id="devRefund">Erstattung Kommandanten-Edition simulieren</button>
+          <button id="devSeasonXp">+300 Saison-XP</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="arsenalModal" role="dialog" aria-modal="true" aria-labelledby="arsenalTitle">
+      <div class="modal-box arsenal-box">
+        <button class="modal-close" data-close-modal="arsenalModal" aria-label="Schließen">×</button>
+        <span>ARSENAL</span>
+        <h2 id="arsenalTitle">Sammlung</h2>
+        <p class="arsenal-balance" id="arsenalBalance"></p>
+        <div class="shop-tabs arsenal-tabs" role="tablist">
+          <button role="tab" data-arsenal-tab="all">Alle</button>
+          <button role="tab" data-arsenal-tab="ship">Schiff</button>
+          <button role="tab" data-arsenal-tab="pilot">Pilot</button>
+          <button role="tab" data-arsenal-tab="cat">Tikki</button>
+        </div>
+        <div class="arsenal-panel" id="arsenalPanel"></div>
+      </div>
+    </div>
+    <div class="modal hidden" id="forgeModal" role="dialog" aria-modal="true" aria-labelledby="forgeTitle">
+      <div class="modal-box forge-box">
+        <button class="modal-close" data-close-modal="forgeModal" aria-label="Schließen">×</button>
+        <span>ARSENAL · NUR OPTIK</span>
+        <h2 id="forgeTitle">Sternenschmiede</h2>
+        <p class="forge-note">Schmiede Looks aus Sternsplittern. Sie ändern nur, wie Schiff, Tikkis Gleiter und Treffer aussehen – nie Schaden, Einkommen oder Beute. Einmal geschmiedet, gehören sie dir für immer.</p>
+        <p class="arsenal-balance" id="forgeBalance"></p>
+        <div class="forge-panel" id="forgePanel"></div>
+      </div>
+    </div>
+    <div class="modal hidden" id="fabModal" role="dialog" aria-modal="true" aria-labelledby="fabTitle">
+      <div class="modal-box fab-box">
+        <button class="modal-close" data-close-modal="fabModal" aria-label="Schließen">×</button>
+        <span id="fabKicker">FERTIGUNG</span>
+        <h2 id="fabTitle">Raffinerie-Zentrale</h2>
+        <div class="fab-panel" id="fabPanel"></div>
+      </div>
+    </div>
+    <div class="modal hidden" id="dnaRevealModal" role="dialog" aria-modal="true" aria-labelledby="dnaRevealTitle">
+      <div class="modal-box capsule-box dna-reveal-box">
+        <button class="modal-close" data-close-modal="dnaRevealModal" aria-label="Schließen">×</button>
+        <span id="dnaRevealKicker">DNA-WAFFE</span>
+        <h2 id="dnaRevealTitle">Neue Waffe</h2>
+        <div class="dna-reveal-stage" id="dnaRevealStage" aria-live="polite"></div>
+        <p class="capsule-odds" id="dnaRevealText"></p>
+        <button id="dnaRevealOk">WEITER</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="chestModal" role="dialog" aria-modal="true" aria-labelledby="chestTitle">
+      <div class="modal-box chest-box">
+        <button class="modal-close" data-close-modal="chestModal" aria-label="Schließen">×</button>
+        <span>ARSENAL</span>
+        <h2 id="chestTitle">Kisten</h2>
+        <div class="chest-kinds-wrap" id="chestKinds"></div>
+        <div class="chest-stage" id="chestStage"></div>
+        <p class="chest-text" id="chestText"></p>
+        <button class="chest-action" id="chestAction">ÖFFNEN</button>
+        <div id="chestOdds"></div>
+      </div>
+    </div>
+    <div class="modal hidden" id="seasonModal" role="dialog" aria-modal="true" aria-labelledby="seasonTitle">
+      <div class="modal-box season-box">
+        <button class="modal-close" data-close-modal="seasonModal" aria-label="Schließen">×</button>
+        <span id="seasonTag">STERNENROUTE · SAISON</span>
+        <h2 id="seasonTitle">Saison</h2>
+        <p class="season-time" id="seasonTime"></p>
+        <div class="season-progress"><i id="seasonFill"></i><b id="seasonLevel">Stufe 0</b></div>
+        <p class="season-hint">
+          Saison-XP gibt es für normales Spielen: Forschung, Expeditionen, Aufträge, Bosse, Planeten. Keine täglichen
+          Pflichtaufgaben.
+        </p>
+        <div class="season-track" id="seasonTrack"></div>
+        <button id="seasonBuy">STERNENPASS FREISCHALTEN</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="welcomeModal" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+      <div class="modal-box reward-box welcome-box">
+        <button class="modal-close" data-close-modal="welcomeModal" aria-label="Schließen">×</button>
+        <span>WILLKOMMEN ZURÜCK</span>
+        <h2 id="welcomeTitle">Deine Kolonie hat weitergearbeitet</h2>
+        <p class="welcome-duration">Abwesend: <b id="welcomeDuration">0 Min.</b></p>
+        <div class="welcome-grid">
+          <div><small>CREDITS</small><b id="welcomeCredits">+0</b></div>
+          <div><small>ERZ</small><b id="welcomeOre">+0</b></div>
+          <div><small>TREIBSTOFF</small><b id="welcomeFuel">+0</b></div>
+        </div>
+        <p class="welcome-rate" id="welcomeRate">60% Offline-Effizienz</p>
+        <p class="welcome-rate welcome-mine" id="welcomeMine" hidden></p>
+        <button class="ad-button hidden" id="welcomeDouble">▶ ERTRAG VERDOPPELN</button>
+        <button data-close-modal="welcomeModal">EINSAMMELN</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="prestigeModal" role="dialog" aria-modal="true" aria-labelledby="prestigeModalTitle">
+      <div class="modal-box">
+        <button class="modal-close" data-close-modal="prestigeModal" aria-label="Schließen">×</button>
+        <span>NEUER STERNZYKLUS</span>
+        <h2 id="prestigeModalTitle">Galaxie verkaufen?</h2>
+        <p>Du erhältst <b id="prestigeConfirmGain">0</b> Sternenstaub. Das bleibt und das startet neu:</p>
+        <div class="prestige-preview" id="prestigePreview"></div>
+        <button id="prestigeConfirm">VERKAUFEN & NEU STARTEN</button>
+        <button class="text-button" data-close-modal="prestigeModal">Abbrechen</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="menuModal" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+      <div class="modal-box menu-box">
+        <button class="modal-close" data-close-modal="menuModal" aria-label="Schließen">×</button>
+        <span>KOMMANDODECK</span>
+        <h2 id="menuTitle">Mehr</h2>
+        <div class="menu-list" id="menuList"></div>
+      </div>
+    </div>
+    <div class="modal hidden" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal-box settings-box">
+        <button class="modal-close" data-close-modal="settingsModal" aria-label="Schließen">×</button>
+        <span>KOMMANDOKONSOLE</span>
+        <h2 id="settingsTitle">Einstellungen</h2>
+        <div class="settings-group">
+          <label class="setting-row"
+            ><span>Effekte</span><input type="range" id="settingSfx" min="0" max="100" step="5"
+          /></label>
+          <label class="setting-row"
+            ><span>Musik</span><input type="range" id="settingMusic" min="0" max="100" step="5"
+          /></label>
+          <label class="setting-row toggle"><span>Ton aus</span><input type="checkbox" id="settingMuted" /></label>
+          <label class="setting-row toggle"><span>Vibration</span><input type="checkbox" id="settingHaptics" /></label>
+          <label class="setting-row"
+            ><span>Bewegung reduzieren</span
+            ><select id="settingMotion">
+              <option value="system">System</option>
+              <option value="on">An</option>
+              <option value="off">Aus</option>
+            </select></label
+          >
+        </div>
+        <div class="settings-group">
+          <b class="settings-label">SPIELSTAND</b>
+          <p class="settings-note" id="saveStatus">Automatisch gespeichert.</p>
+          <div class="settings-actions">
+            <button id="exportSave">Sicherungscode kopieren</button>
+            <button id="importSaveToggle">Code einfügen</button>
+          </div>
+          <div class="import-panel hidden" id="importPanel">
+            <textarea id="importCode" rows="3" placeholder="NH1.…" aria-label="Sicherungscode"></textarea>
+            <button id="importSave">Spielstand laden</button>
+          </div>
+        </div>
+        <div class="settings-group hidden" id="betaGroup">
+          <b class="settings-label">FRIENDS BETA</b>
+          <p class="settings-note">
+            Unfertige Testversion: Werte können sich ändern. Der Fortschritt liegt nur in diesem Browser auf diesem Gerät
+            (Sicherungscode oben nutzen). Echtgeld-Käufe sind nicht verfügbar.
+          </p>
+          <div class="settings-actions">
+            <button id="betaFeedbackOpen">Beta-Feedback senden</button>
+          </div>
+          <div class="settings-actions hidden" id="betaUpdateRow">
+            <button id="betaUpdateSettings">Neue Version laden</button>
+          </div>
+        </div>
+        <div class="settings-group settings-links">
+          <a href="privacy.html" target="_blank" rel="noopener">Datenschutzerklärung</a>
+          <a href="credits.html" target="_blank" rel="noopener">Lizenzen & Credits</a>
+          <small id="versionLabel">Version</small>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="betaFeedbackModal" role="dialog" aria-modal="true" aria-labelledby="betaFeedbackTitle">
+      <div class="modal-box settings-box beta-feedback-box">
+        <button class="modal-close" data-close-modal="betaFeedbackModal" aria-label="Schließen">×</button>
+        <span>FRIENDS BETA</span>
+        <h2 id="betaFeedbackTitle">Beta-Feedback</h2>
+        <p class="settings-note">
+          Es wird nichts automatisch gesendet. Kopiere den Bericht und schicke ihn dem Entwickler (z. B. per Messenger).
+        </p>
+        <label class="setting-row"
+          ><span>Worum geht es?</span
+          ><select id="betaFeedbackCategory">
+            <option value="gefiel">Das hat mir gefallen</option>
+            <option value="verwirrend">Das war verwirrend</option>
+            <option value="fehler">Fehler / Absturz</option>
+            <option value="ruckeln">Ruckelt / langsam</option>
+            <option value="steuerung">Steuerung schwierig</option>
+            <option value="optik">Sieht nicht schön aus</option>
+            <option value="sonst">Sonstiges</option>
+          </select></label
+        >
+        <textarea
+          id="betaFeedbackText"
+          rows="4"
+          maxlength="1500"
+          placeholder="Was ist passiert? Wo hast du aufgehört?"
+          aria-label="Beschreibung"
+        ></textarea>
+        <pre class="beta-feedback-preview" id="betaFeedbackPreview"></pre>
+        <textarea id="betaFeedbackFallback" class="hidden" rows="4" readonly aria-label="Bericht zum Kopieren"></textarea>
+        <div class="settings-actions">
+          <button id="betaFeedbackCopy">Bericht kopieren</button>
+          <button id="betaFeedbackShare" class="hidden">Teilen …</button>
+        </div>
+      </div>
+    </div>
+    <div class="beta-bar beta-notice hidden" id="betaNotice" role="status">
+      <p>
+        <b>Friends Beta</b> – unfertige Testversion. Dein Fortschritt wird nur auf diesem Gerät gespeichert; Käufe sind
+        noch nicht verfügbar.
+      </p>
+      <div>
+        <button id="betaNoticeFeedback">Feedback</button><button id="betaNoticeOk">Verstanden</button>
+      </div>
+    </div>
+    <div class="beta-bar beta-update hidden" id="betaUpdateBar" role="status">
+      <p><b>Neue Version verfügbar.</b> Dein Spielstand bleibt erhalten.</p>
+      <div>
+        <button id="betaUpdateLater">Später</button><button id="betaUpdateReload">Neu laden</button>
+      </div>
+    </div>
+    <div class="story-bubble hidden" id="storyBubble" role="dialog" aria-live="polite">
+      <div class="story-portrait" id="storyPortrait"></div>
+      <div class="story-copy"><b id="storySpeaker">Mochi</b><p id="storyText"></p></div>
+      <button id="storyNext" aria-label="Weiter">›</button>
+    </div>
+    <div class="modal hidden" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="modal-box confirm-box">
+        <button class="modal-close" data-close-modal="confirmModal" aria-label="Schließen">×</button>
+        <span id="confirmKicker">BESTÄTIGEN</span>
+        <h2 id="confirmTitle">Sicher?</h2>
+        <div class="confirm-body" id="confirmBody"></div>
+        <div class="confirm-actions">
+          <button class="confirm-cancel" data-close-modal="confirmModal">ABBRECHEN</button>
+          <button class="confirm-ok" id="confirmOk">BESTÄTIGEN</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="talentModal" role="dialog" aria-modal="true" aria-labelledby="talentTitle">
+      <div class="modal-box capsule-box">
+        <button class="modal-close" data-close-modal="talentModal" aria-label="Schließen">×</button>
+        <span id="talentKicker">TALENT-KAPSEL · GRATIS</span>
+        <h2 id="talentTitle">Neue Kollegin!</h2>
+        <div class="capsule-art" id="talentArt"></div>
+        <b class="capsule-item" id="talentItem"></b>
+        <p class="capsule-odds" id="talentText"></p>
+        <button id="talentOk" data-close-modal="talentModal">WEITER</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="capsuleModal" role="dialog" aria-modal="true" aria-labelledby="capsuleTitle">
+      <div class="modal-box capsule-box">
+        <button class="modal-close" data-close-modal="capsuleModal" aria-label="Schließen">×</button>
+        <span>WILLKOMMENSKAPSEL · GRATIS</span>
+        <h2 id="capsuleTitle">Ein Geschenk für Mochi!</h2>
+        <div class="capsule-art" id="capsuleArt"></div>
+        <b class="capsule-item" id="capsuleItem"></b>
+        <p class="capsule-odds">
+          Die Kapsel enthält zufällig eines von 6 Accessoires – jedes mit derselben Chance (1/6 ≈ 16,7 %). Rein optisch,
+          kein Spielvorteil, einmal pro Spielstand, nicht käuflich. Die übrigen Accessoires gibt es später auf transparente Weise.
+        </p>
+        <button id="capsuleEquip">ANLEGEN</button>
+      </div>
+    </div>
+    <script src="config.js"></script>
+    <script src="friends-beta.js"></script>
+    <script src="game-data.js"></script>
+    <script src="persistence.js"></script>
+    <script src="audio.js"></script>
+    <script src="monetization.js"></script>
+    <script src="engine/core.js"></script>
+    <script src="scenes/kittens.js"></script>
+    <script src="scenes/art.js"></script>
+    <script src="scenes/ship-art.js"></script>
+    <script src="scenes/planet-layouts.js"></script>
+    <script src="scenes/colony-art.js"></script>
+    <script src="scenes/pyra-art.js"></script>
+    <script src="scenes/mekhanos-art.js"></script>
+    <script src="scenes/viridia-art.js"></script>
+    <script src="scenes/enemy-art.js"></script>
+    <script src="scenes/enemy-art-outer.js"></script>
+    <script src="scenes/colony-scene.js"></script>
+    <script src="scenes/mine-art.js"></script>
+    <script src="scenes/mine-scene.js"></script>
+    <script src="scenes/combat-scene.js"></script>
+    <script src="scenes/arena-scene.js"></script>
+    <script src="industry.js"></script>
+    <script src="deepcore.js"></script>
+    <script src="freight.js"></script>
+    <script src="pyra.js"></script>
+    <script src="mekhanos.js"></script>
+    <script src="viridia.js"></script>
+    <script src="arsenal.js"></script>
+    <script src="combat-cat.js"></script>
+    <script src="challenge.js"></script>
+    <script src="campaign.js"></script>
+    <script src="fabrication.js"></script>
+    <script src="dna.js"></script>
+    <script src="dna2.js"></script>
+    <script src="arena.js"></script>
+    <script src="outer-campaigns.js"></script>
+    <script src="game.js"></script>
+    <script src="industry-ui.js"></script>
+    <script src="freight-ui.js"></script>
+    <script src="frostbyte.js"></script>
+    <script src="pyra-ui.js"></script>
+    <script src="cogsworth-ui.js"></script>
+    <script src="petalguard-ui.js"></script>
+    <script src="arsenal-ui.js"></script>
+    <script src="challenge-ui.js"></script>
+    <script src="campaign-ui.js"></script>
+    <script src="planet-gate.js"></script>
+    <script src="forge-ui.js"></script>
+    <script src="shop-ui.js"></script>
+    <script src="combat-cat-ui.js"></script>
+    <script src="combat-gun.js"></script>
+    <script src="prestige-ui.js"></script>
+    <script src="bazaar.js"></script>
+    <script src="income.js"></script>
+    <script src="market.js"></script>
+    <script src="fabrication-ui.js"></script>
+    <script src="combat-ui.js"></script>
+    <script src="dna-ui.js"></script>
+    <script src="dna2-ui.js"></script>
+    <script src="arena-ui.js"></script>
+    <script src="reveal.js"></script>
+    <script src="chest-reveal.js"></script>
+    <script src="expedition-ui.js"></script>
+    <script src="outer-campaigns-ui.js"></script>
+    <script src="deepcore-ui.js"></script>
+    <script src="batch-ui.js"></script>
+    <script src="mobile-ux.js"></script>
+    <script src="menu-ui.js"></script>
+    <script src="platform.js"></script>
+    <script src="frame-pacing.js"></script>
+    <script src="scenes/boot.js"></script>
+  </body>
+</html>

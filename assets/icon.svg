@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 432">
+<clipPath id="r"><rect width="432" height="432" rx="96"/></clipPath>
+<g clip-path="url(#r)">
+  <defs>
+    <radialGradient id="bbg" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="#1d3a78"/>
+      <stop offset="0.55" stop-color="#0d1d44"/>
+      <stop offset="1" stop-color="#050b1f"/>
+    </radialGradient>
+    <radialGradient id="bneb" cx="0.75" cy="0.2" r="0.5">
+      <stop offset="0" stop-color="#7b4fd8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#7b4fd8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="432" height="432" fill="url(#bbg)"/>
+  <rect width="432" height="432" fill="url(#bneb)"/>
+  <g fill="#dfe9ff">
+    <circle cx="70" cy="80" r="2.4" opacity="0.8"/>
+    <circle cx="350" cy="320" r="2" opacity="0.6"/>
+    <circle cx="110" cy="350" r="1.8" opacity="0.6"/>
+    <circle cx="372" cy="96" r="2.6" opacity="0.8"/>
+    <circle cx="300" cy="380" r="1.6" opacity="0.5"/>
+    <circle cx="48" cy="250" r="1.6" opacity="0.5"/>
+  </g>
+
+<g transform="translate(-69 -69) scale(1.32)">
+  
+  <defs>
+    <radialGradient id="fplanet" cx="0.36" cy="0.32" r="0.78">
+      <stop offset="0" stop-color="#b9fff6"/>
+      <stop offset="0.28" stop-color="#5fd9e6"/>
+      <stop offset="0.66" stop-color="#3a63c9"/>
+      <stop offset="1" stop-color="#22206b"/>
+    </radialGradient>
+    <linearGradient id="fring" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffcf6a" stop-opacity="0"/>
+      <stop offset="0.25" stop-color="#ffcf6a"/>
+      <stop offset="0.75" stop-color="#ffe7a8"/>
+      <stop offset="1" stop-color="#ffcf6a" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fcrystal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3e6ff"/>
+      <stop offset="0.5" stop-color="#b48cff"/>
+      <stop offset="1" stop-color="#6d45d8"/>
+    </linearGradient>
+    <filter id="fglow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <circle cx="216" cy="222" r="96" fill="#5fd9e6" opacity="0.45" filter="url(#fglow)"/>
+  
+  <path d="M96 236 C 130 190, 300 178, 340 206" fill="none" stroke="url(#fring)" stroke-width="12" stroke-linecap="round" opacity="0.55"/>
+  <circle cx="216" cy="222" r="88" fill="url(#fplanet)"/>
+  
+  <path d="M140 200 C 180 186, 250 186, 296 204" fill="none" stroke="#c9fbff" stroke-width="7" stroke-linecap="round" opacity="0.35"/>
+  <path d="M136 246 C 186 262, 250 262, 298 240" fill="none" stroke="#1b1a5c" stroke-width="9" stroke-linecap="round" opacity="0.35"/>
+  
+  <path d="M206 150 L222 104 L238 150 Z" fill="url(#fcrystal)"/>
+  <path d="M226 156 L250 122 L256 160 Z" fill="url(#fcrystal)" opacity="0.92"/>
+  <path d="M184 158 L196 128 L210 160 Z" fill="url(#fcrystal)" opacity="0.85"/>
+  <path d="M222 104 L230 150" stroke="#ffffff" stroke-width="3" opacity="0.7"/>
+  
+  <path d="M96 236 C 140 286, 300 280, 340 206" fill="none" stroke="url(#fring)" stroke-width="14" stroke-linecap="round"/>
+  
+  <g transform="translate(300 128) rotate(-18)">
+    <ellipse cx="0" cy="0" rx="24" ry="15" fill="#e8eef9"/>
+    <ellipse cx="4" cy="-2" rx="11" ry="8" fill="#5fe6ea"/>
+    <rect x="-34" y="-4" width="14" height="8" rx="4" fill="#ffc95a"/>
+    <path d="M-2 14 L-8 34 M6 14 L12 34" stroke="#e8eef9" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="-8" cy="36" r="4" fill="#a8ee70"/>
+    <circle cx="12" cy="36" r="4" fill="#a8ee70"/>
+  </g>
+  
+  <path d="M132 128 l6 16 16 6 -16 6 -6 16 -6 -16 -16 -6 16 -6 z" fill="#fff7c2"/>
+
+</g></g>
+</svg>

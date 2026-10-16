@@ -1,0 +1,47 @@
+@font-face {
+  font-family: 'Nunito';
+  font-weight: 700;
+  font-display: swap;
+  src: url('assets/fonts/nunito-latin-700-normal.woff2') format('woff2');
+}
+:root {
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  background: #071329;
+  color: #e9f0ff;
+  font: 15px/1.55 Nunito, system-ui, sans-serif;
+}
+main {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: max(20px, env(safe-area-inset-top)) 18px 48px;
+}
+h1 {
+  font-size: 26px;
+  margin: 16px 0 8px;
+}
+h2 {
+  font-size: 17px;
+  margin: 26px 0 6px;
+  color: #64e7e9;
+}
+a {
+  color: #64e7e9;
+}
+.back {
+  display: inline-block;
+  padding: 10px 0;
+  font-weight: 700;
+  text-decoration: none;
+}
+.draft {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #4a3410;
+  color: #ffd98a;
+}
+code {
+  color: #a8ee70;
+}
