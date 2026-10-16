@@ -13044,3 +13044,8 @@ body.expedition-on .app-shell {
   white-space: nowrap;
   border: 0;
 }
+/* Friends Beta: the first-run notice and the update bar never cover a fullscreen fight (they come back after it) */
+body.expedition-on #betaNotice,
+body.expedition-on #betaUpdateBar {
+  display: none !important;
+}

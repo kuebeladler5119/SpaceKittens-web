@@ -1,6 +1,6 @@
 // PWA offline support. Network-first so updates are picked up immediately; cache is the offline fallback.
 // Not registered inside the Android app (Capacitor serves files locally) or on local dev hosts.
-const CACHE = 'space-kittens-fb-7cc32c390668';
+const CACHE = 'space-kittens-fb-4df69f4ff6cc';
 const CORE = [
   "./arena-ui.js",
   "./arena.js",
