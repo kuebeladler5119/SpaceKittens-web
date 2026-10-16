@@ -789,7 +789,7 @@
       const c = document.createElement('canvas');
       c.width = width;
       c.height = height;
-      const ctx = c.getContext('2d');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
       if (ctx && c.toDataURL) {
         ctx.translate(width * 0.52, height * 0.5);
         const s = Math.min(width / 1.9, height / 1.05);

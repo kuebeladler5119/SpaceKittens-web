@@ -28,6 +28,8 @@ const WORKPLACES = [
   { id: 'elevator', job: 'elevator', name: 'Förderaufzug', stage: 'Aufzug', verb: 'AUFZUG SCHICKEN', hire: 180 },
   { id: 'rail', job: 'transport', name: 'Lorenbahn', stage: 'Transport', verb: 'LORE SCHICKEN', hire: 250 },
   { id: 'depot', job: 'storage', name: 'Lagerhaus', stage: 'Beschickung', verb: 'BESCHICKEN', hire: 20000 },
+  // Beta 1.7 M2: the sorting and packing station next to the depot (packed crates sell better)
+  { id: 'sorter', job: 'storage', name: 'Packstation', stage: 'Sortieren & Packen', verb: 'PACKEN', hire: 4000 },
   { id: 'refinery', job: 'production', name: 'Raffinerie', stage: 'Verarbeitung', verb: 'VERARBEITEN', hire: 30000 },
   { id: 'stall', job: 'trade', name: 'Verkaufsstand', stage: 'Verkauf', verb: 'VERKAUFEN', hire: 500 },
   { id: 'dock', job: 'logistics', name: 'Frachtdock', stage: 'Fracht', verb: 'FRACHTER STARTEN', hire: 8000 },
@@ -40,7 +42,9 @@ const WORKPLACES = [
   { id: 'workshop', job: 'production', name: 'Präzisionswerkstatt', stage: 'Präzisionsbauteile', verb: 'FERTIGEN', hire: 6000 },
   // Viridia Bloom only (planet theme 'verdant', schema 32)
   { id: 'sporeGarden', job: 'mining', name: 'Sporengarten', stage: 'Sporenernte', verb: 'SPOREN ERNTEN', hire: 9000 },
-  { id: 'biolab', job: 'production', name: 'Biolabor', stage: 'Biogel', verb: 'BIOGEL ANSETZEN', hire: 12000 }
+  { id: 'biolab', job: 'production', name: 'Biolabor', stage: 'Biogel', verb: 'BIOGEL ANSETZEN', hire: 12000 },
+  // Beta 1.7 M5: Orion's Sternenharz drill station (resin into tanks → Fertigung: fuel and chemicals)
+  { id: 'resinDrill', job: 'mining', name: 'Harzbohrturm', stage: 'Harzförderung', verb: 'HARZ PUMPEN', hire: 15000 }
 ];
 // Glacies recipe: 4 Frostquarz + 10 raw crystals from the depot → 1 Thermalzelle.
 const FROST_PER_CELL = 4;
@@ -52,6 +56,8 @@ const INDUSTRY_BUILDINGS = {
   rail: { name: 'Lorenbahn', icon: '🛒', cost: 25, start: 1, perLevel: 60 },
   stall: { name: 'Verkaufsstand', icon: '◈', cost: 120, start: 1, perLevel: 8 },
   refinery: { name: 'Raffinerie', icon: '⚙', cost: 6000, start: 0, perLevel: 20, unlockDepot: 5 },
+  // Beta 1.7 M2: sorts raw crystals from the depot into crates; the sale takes crates first at +15 %
+  sorter: { name: 'Packstation', icon: '📦', cost: 2500, start: 0, perLevel: 6, unlockDepot: 3 },
   frostDrill: { name: 'Frostquarz-Bohrer', icon: '❄', cost: 1200, start: 0, perLevel: 0.5, planets: ['ice'] },
   thermal: { name: 'Thermalwerkstatt', icon: '♨', cost: 5000, start: 0, perLevel: 0.2, planets: ['ice'], needs: 'frostDrill' },
   foundry: { name: 'Glutschmelze', icon: '🔥', cost: 30000, start: 0, perLevel: 0.05, planets: ['volcanic'] },
@@ -60,7 +66,10 @@ const INDUSTRY_BUILDINGS = {
   workshop: { name: 'Präzisionswerkstatt', icon: '⚙', cost: 450000, start: 0, perLevel: 0.2, planets: ['machine'] },
   // Viridia Bloom (session 11): Sporengarten → Biolabor; see viridia.js
   sporeGarden: { name: 'Sporengarten', icon: '✿', cost: 1500000, start: 0, perLevel: 3, planets: ['verdant'] },
-  biolab: { name: 'Biolabor', icon: '◍', cost: 3000000, start: 0, perLevel: 1, planets: ['verdant'], needs: 'sporeGarden' }
+  biolab: { name: 'Biolabor', icon: '◍', cost: 3000000, start: 0, perLevel: 1, planets: ['verdant'], needs: 'sporeGarden' },
+  // Beta 1.7 M5: pumps Sternenharz from under the crystal plain into its tanks (no building multiplier: a slow, steady
+  // source – fuel stays a decision, see docs/beta-1-7/STERNENHARZ.md)
+  resinDrill: { name: 'Sternenharz-Bohrturm', icon: '🛢', cost: 40000, start: 0, perLevel: 0.06, planets: ['crystal'], unlockDepot: 8 }
 };
 // Planet-specific materials (stored per colony in colony.stock; ids are stable save keys).
 const MATERIALS = {
@@ -71,7 +80,8 @@ const MATERIALS = {
   precisionOre: { name: 'Präzisionserz', icon: '⚙', planets: ['machine'] },
   precisionParts: { name: 'Präzisionsbauteile', icon: '⛭', planets: ['machine'] },
   spores: { name: 'Leuchtsporen', icon: '✿', planets: ['verdant'] },
-  biogel: { name: 'Biogel', icon: '◍', planets: ['verdant'] }
+  biogel: { name: 'Biogel', icon: '◍', planets: ['verdant'] },
+  resin: { name: 'Sternenharz', icon: '✺', planets: ['crystal'] }
 };
 // Collectible specialist managers (account level). Stage bonus = 1 + 0.15 × rank; secondary ability from rank 3.
 const SPECIALISTS = [
@@ -200,7 +210,9 @@ function normalizeIndustryColony(saved, levels, legacyConversion) {
     foundry: Math.floor(num(saved?.industry?.foundry, 0, 100000)),
     workshop: Math.floor(num(saved?.industry?.workshop, 0, 100000)),
     sporeGarden: Math.floor(num(saved?.industry?.sporeGarden, 0, 100000)),
-    biolab: Math.floor(num(saved?.industry?.biolab, 0, 100000))
+    biolab: Math.floor(num(saved?.industry?.biolab, 0, 100000)),
+    sorter: Math.floor(num(saved?.industry?.sorter, 0, 100000)),
+    resinDrill: Math.floor(num(saved?.industry?.resinDrill, 0, 100000))
   };
   if (built) {
     industry.rail = Math.max(1, industry.rail);
@@ -217,7 +229,9 @@ function normalizeIndustryColony(saved, levels, legacyConversion) {
     precisionOre: num(saved?.stock?.precisionOre, 0),
     precisionParts: num(saved?.stock?.precisionParts, 0),
     spores: num(saved?.stock?.spores, 0),
-    biogel: num(saved?.stock?.biogel, 0)
+    biogel: num(saved?.stock?.biogel, 0),
+    packed: num(saved?.stock?.packed, 0),
+    resin: num(saved?.stock?.resin, 0)
   };
   const staff = emptyStaff();
   WORKPLACES.forEach(w => (staff[w.id] = Math.floor(num(saved?.staff?.[w.id], 0, STAFF_MAX_LEVEL))));
@@ -250,7 +264,106 @@ function normalizeIndustryColony(saved, levels, legacyConversion) {
   };
   // Viridia's Wurzelnetz (schema 32): which root feeds which stage; every colony carries it, only Viridia uses it.
   const roots = normalizeRoots(saved?.roots);
-  return { industry, stock, staff, trip, converted, convertedJobs, railSizing, reserve, roots };
+  // Beta 1.7 M2: the depot's distribution (sell / keep / production first); missing → the defaults
+  const alloc = normalizeAlloc(saved?.alloc);
+  // Beta 1.7 M3: the carts on the surface line (transport.js); missing → an empty line
+  const transit = typeof normalizeTransit === 'function' ? normalizeTransit(saved?.transit) : null;
+  return { industry, stock, staff, trip, converted, convertedJobs, railSizing, reserve, roots, alloc, transit };
+}
+// Beta 1.7 M2: Verteilung of a colony's depot. The player decides whether surplus raw crystals and bars are sold
+// automatically, how much raw stays as a minimum stock, and whether production orders come before the sale. The
+// defaults need no micromanagement: everything surplus is sold, and active production orders keep their next batch.
+const ALLOC_KEEP_OPTIONS = [0, 100, 500, 2000, 10000];
+function normalizeAlloc(saved) {
+  return {
+    sellRaw: saved?.sellRaw !== false,
+    sellBars: saved?.sellBars !== false,
+    keep: ALLOC_KEEP_OPTIONS.includes(Number(saved?.keep)) ? Number(saved.keep) : 0,
+    priority: saved?.priority === 'sale' ? 'sale' : 'production'
+  };
+}
+function colonyAlloc(planet = state.activePlanet) {
+  const colony = state.colonies[planet];
+  if (colony && !colony.alloc) colony.alloc = normalizeAlloc(null);
+  return colony?.alloc || normalizeAlloc(null);
+}
+// raw that production orders hold back from the sale (and from the hopper feed): their next batch
+function fabReserveUnits(planet = state.activePlanet) {
+  return colonyAlloc(planet).priority !== 'sale' && typeof fabRawDemand === 'function' ? fabRawDemand(planet) : 0;
+}
+// Beta 1.7 M3/QA: the carts deliver in batches (one every CART_INTERVAL s), so every automated processing step keeps
+// one delivery interval of its raw input in the depot: the refinery's feed and the specialty buildings (Thermalwerkstatt,
+// Glutschmelze, Präzisionswerkstatt, Biolabor). Otherwise the sale takes a batch in the tick it arrives and these
+// buildings only get one second's worth per delivery (they ran at ~40 % – found by the economy simulation, QA).
+// Only what each step really consumes (rate × its raw per unit), never the feed's full speed.
+function feedReserveUnits(planet = state.activePlanet) {
+  const colony = state.colonies[planet];
+  if (!colony || colonyAlloc(planet).priority === 'sale') return 0;
+  const span = (typeof CART_INTERVAL === 'number' ? CART_INTERVAL : 0) + 1;
+  return withPlanet(planet, () => {
+    let perSecond = 0;
+    if ((colony.industry.refinery || 0) > 0 && isAutomated('depot') && isAutomated('refinery')) perSecond += Math.min(feedRate(), refineryRate());
+    if ((colony.industry.thermal || 0) > 0 && isAutomated('thermal')) perSecond += thermalRate() * RAW_PER_CELL;
+    if ((colony.industry.foundry || 0) > 0 && isAutomated('foundry') && typeof foundryRate === 'function') perSecond += foundryRate() * 1.5 * RAW_PER_ALLOY;
+    if ((colony.industry.workshop || 0) > 0 && isAutomated('workshop') && typeof workshopRate === 'function') perSecond += workshopRate() * RAW_PER_PART;
+    if ((colony.industry.biolab || 0) > 0 && isAutomated('biolab') && typeof biogelRate === 'function') perSecond += biogelRate() * RAW_PER_GEL;
+    return perSecond * span;
+  });
+}
+// The sales floor: the largest of the K62 reserve, the chosen minimum stock, and what production keeps (the orders'
+// next batches plus one cart interval of every automated processing step's raw input).
+function rawSaleFloor(planet = state.activePlanet) {
+  const cap = withPlanet(planet, () => storageCapacity());
+  return Math.min(cap, Math.max(rawReserveUnits(planet), colonyAlloc(planet).keep, fabReserveUnits(planet) + feedReserveUnits(planet)));
+}
+
+// ----- Beta 1.7 M2: conservation book -----
+// Every quantity of a colony is in exactly one place: underground (faces, kittens, platforms, the cabin), the Halde, a
+// cart, the depot, the hopper, the bar store (1 bar = BAR_RAW raw), a production batch in work or a freight hold. The
+// book counts what enters the economy (mined, extracted, tapped, bought) and what leaves it (sold, consumed by a
+// recipe, delivered, used for a repair); inventoryRaw() sums the places. Tests assert Δinventory = created − destroyed
+// for any mix of steps, so nothing can appear or vanish unnoticed. Runtime only (not saved), like industryFlow.
+const LEDGER = { created: {}, destroyed: {}, credits: {} };
+function ledgerBook(kind, planet, material, amount) {
+  if (!(amount > 0) || !LEDGER[kind]) return;
+  const bars = material === 'bars',
+    key = planet + ':' + (bars ? 'raw' : material);
+  LEDGER[kind][key] = (LEDGER[kind][key] || 0) + (bars ? amount * BAR_RAW : amount);
+}
+function ledgerNet(planet, material) {
+  const key = planet + ':' + material;
+  return (LEDGER.created[key] || 0) - (LEDGER.destroyed[key] || 0);
+}
+function ledgerReset() {
+  LEDGER.created = {};
+  LEDGER.destroyed = {};
+  LEDGER.credits = {};
+}
+// Credits by source ('sale:auto', 'sale:manual', 'sale:speciality', 'sale:goods', 'contract'; rewards stay 'other').
+function ledgerCredits(source, amount) {
+  if (amount > 0) LEDGER.credits[source] = (LEDGER.credits[source] || 0) + amount;
+}
+// Raw crystals of a colony in raw units wherever they are (bars count BAR_RAW each); freight holds are added once for
+// the whole galaxy by inventoryRawGalaxy().
+function inventoryRaw(planet) {
+  const c = state.colonies[planet];
+  if (!c) return 0;
+  const inWork = (c.fab?.orders || []).reduce((sum, o) => sum + (o.loaded && typeof RECIPES !== 'undefined' && RECIPES[o.recipe] ? RECIPES[o.recipe].in.raw || 0 : 0), 0);
+  return (
+    (typeof undergroundStockOf === 'function' ? undergroundStockOf('raw', planet) : 0) +
+    c.stock.pile +
+    (c.trip?.amount || 0) +
+    (state.planetOps.storage[planet] || 0) +
+    c.stock.hopper +
+    c.stock.bars * BAR_RAW +
+    (c.stock.packed || 0) +
+    (typeof transitStock === 'function' ? transitStock(planet) : 0) +
+    inWork
+  );
+}
+function inventoryRawGalaxy() {
+  const freight = typeof freightInTransit === 'function' ? freightInTransit('raw') + freightInTransit('bars') * BAR_RAW : 0;
+  return state.colonies.reduce((sum, _, i) => sum + inventoryRaw(i), 0) + freight;
 }
 
 // ----- K62: Rohkristall-Reserve -----
@@ -274,7 +387,7 @@ function rawReserveUnits(planet = state.activePlanet) {
   return units > 0 ? Math.min(units, withPlanet(planet, () => storageCapacity())) : 0;
 }
 function sellableRaw(planet = state.activePlanet) {
-  return Math.max(0, (state.planetOps.storage[planet] || 0) - rawReserveUnits(planet));
+  return Math.max(0, (state.planetOps.storage[planet] || 0) - rawSaleFloor(planet));
 }
 function setRawReserve(charges, planet = state.activePlanet) {
   const colony = state.colonies[planet];
@@ -331,8 +444,9 @@ function workplaceExists(id, planet = state.activePlanet) {
   const colony = colonyAt(planet);
   if (!colony || !state.planetsUnlocked[planet]) return false;
   if (id === 'dock') return colony.buildings[3].level > 0;
-  if (['frostDrill', 'thermal', 'foundry', 'workshop', 'sporeGarden', 'biolab'].includes(id)) return planetAllows(id, planet) && colony.industry[id] > 0;
+  if (['frostDrill', 'thermal', 'foundry', 'workshop', 'sporeGarden', 'biolab', 'resinDrill'].includes(id)) return planetAllows(id, planet) && colony.industry[id] > 0;
   if (id === 'refinery') return colony.industry.refinery > 0;
+  if (id === 'sorter') return (colony.industry.sorter || 0) > 0;
   if (id === 'elevator') return undergroundOpen(planet);
   if (SHAFT_IDS.includes(id)) return shaftBuilt(id, planet);
   if (id === 'depot') return colony.buildings[2].level > 0 && colony.industry.refinery > 0;
@@ -359,7 +473,7 @@ function workplaceEfficiency(workplace, planet = state.activePlanet) {
   const special = specialistAt(planet, workplace);
   if (special) return 1 + 0.15 * specialistRank(special);
   const level = colonyAt(planet)?.staff[workplace] || 0;
-  return level > 0 ? 1 + 0.05 * (level - 1) : 1;
+  return level > 0 ? (1 + 0.05 * (level - 1)) * (typeof techStaffFactor === 'function' ? techStaffFactor() : 1) : 1;
 }
 function secondaryActive(id, planet = state.activePlanet) {
   return specialistActive(id, planet) && specialistRank(id) >= 3;
@@ -459,8 +573,31 @@ function barCapacity() {
   const level = industryLevel('refinery');
   return level > 0 ? 20 + 10 * level * buildingMultiplier(level) : 0;
 }
+// Beta 1.7 M5: Sternenharz. The drill fills its tanks (resin units); full tanks stop the pump (nothing is lost).
+function resinRate(planet = state.activePlanet) {
+  const level = state.colonies[planet]?.industry?.resinDrill || 0;
+  return level > 0 ? INDUSTRY_BUILDINGS.resinDrill.perLevel * level * withPlanet(planet, () => workplaceEfficiency('resinDrill')) : 0;
+}
+function resinCapacity(planet = state.activePlanet) {
+  const level = state.colonies[planet]?.industry?.resinDrill || 0;
+  return level > 0 ? Math.floor((40 + 20 * level) * (typeof techResinCapacityFactor === 'function' ? techResinCapacityFactor() : 1)) : 0;
+}
+// Beta 1.7 M2: the Packstation. Packs raw crystals above the sale floor into crates (raw units); the sale takes
+// crates first and pays PACK_PREMIUM for them. Crates are raw crystals in another place (counted by inventoryRaw).
+const PACK_PREMIUM = 1.15;
+function packPremium() {
+  return typeof techPackPremium === 'function' ? techPackPremium() : PACK_PREMIUM;
+}
+function packRate(planet = state.activePlanet) {
+  const level = state.colonies[planet]?.industry?.sorter || 0;
+  return level > 0 ? INDUSTRY_BUILDINGS.sorter.perLevel * level * buildingMultiplier(level) * withPlanet(planet, () => workplaceEfficiency('sorter')) : 0;
+}
+function packCapacity(planet = state.activePlanet) {
+  const level = state.colonies[planet]?.industry?.sorter || 0;
+  return level > 0 ? 200 + 100 * level * buildingMultiplier(level) : 0;
+}
 function barValue() {
-  return BAR_VALUE + (secondaryActive('pudding') ? 1 : 0);
+  return BAR_VALUE + (secondaryActive('pudding') ? 1 : 0) + (typeof techHas === 'function' && techHas('barMint') ? 1 : 0);
 }
 function colonyRates() {
   const open = undergroundOpen();
@@ -493,7 +630,15 @@ function colonyRates() {
     sporeCap: sporeCapacity(),
     BL: biogelRate(),
     gelCap: biogelCapacity(),
-    rawReserve: rawReserveUnits()
+    RS: resinRate(),
+    resinCap: resinCapacity(),
+    PK: packRate(),
+    packCap: packCapacity(),
+    rawReserve: rawSaleFloor(),
+    fabReserve: fabReserveUnits(),
+    barsReserve: colonyAlloc().priority !== 'sale' && typeof fabDemand === 'function' ? fabDemand(state.activePlanet, 'bars') : 0,
+    sellRaw: colonyAlloc().sellRaw,
+    sellBars: colonyAlloc().sellBars
   };
 }
 function colonyAutomation(planet = state.activePlanet) {
@@ -513,7 +658,8 @@ function simulateColonyFlow(stock, r, a, dt) {
   let depot = stock.depot + moved;
   const saleCap = ((a.stall ? r.S1 : 0) + (a.dock ? r.S2 : 0)) * dt; // raw-equivalent units
   const hopperRoom = Math.max(0, r.hopperCap - stock.hopper) + (a.refinery ? r.P * dt : 0);
-  let fed = a.depot && r.refineryOn ? Math.max(0, Math.min(r.F * dt, depot, hopperRoom)) : 0;
+  // Beta 1.7: the hopper feed leaves the production orders' next batch in the depot (they take turns, nobody starves)
+  let fed = a.depot && r.refineryOn ? Math.max(0, Math.min(r.F * dt, depot - (r.fabReserve || 0), hopperRoom)) : 0;
   depot -= fed;
   // Glacies: Frostquarz extraction and Thermalzellen (4 frost + 10 raw → 1 cell); raw comes from the depot first.
   const frostGross = a.frostDrill ? (r.FR || 0) * dt : 0;
@@ -570,16 +716,35 @@ function simulateColonyFlow(stock, r, a, dt) {
     sporesExtracted -= idle;
   }
   let hopper = stock.hopper + fed;
-  const barRoom = Math.max(0, r.barCap - stock.bars) + saleCap / BAR_RAW;
+  const barRoom = Math.max(0, r.barCap - stock.bars) + (r.sellBars === false ? 0 : saleCap / BAR_RAW);
   const processed = a.refinery && r.refineryOn ? Math.max(0, Math.min(r.P * dt, hopper, barRoom * BAR_RAW)) : 0;
   hopper -= processed;
   let bars = stock.bars + processed / BAR_RAW;
+  // Beta 1.7 M5: the Sternenharz drill pumps into its tanks (a full tank stops the pump)
+  const resinGross = a.resinDrill ? (r.RS || 0) * dt : 0;
+  let resin = (stock.resin || 0) + resinGross,
+    resinExtracted = resinGross;
+  if (resin > (r.resinCap || 0) && resinGross > 0) {
+    const idle = Math.min(resin - (r.resinCap || 0), resinGross);
+    resin -= idle;
+    resinExtracted -= idle;
+  }
+  // Beta 1.7 M2: the Packstation packs sellable raw (above the sale floor) into crates
+  let packed = stock.packed || 0;
+  const packedNow = a.sorter && r.PK > 0 ? Math.max(0, Math.min(r.PK * dt, depot - (r.rawReserve || 0), (r.packCap || 0) - packed)) : 0;
+  depot -= packedNow;
+  packed += packedNow;
   let capacity = saleCap;
-  const barsSold = Math.min(bars, capacity / BAR_RAW);
+  // Beta 1.7 M9: production orders keep their next batch of bars too (e.g. Kernkristall: 100 bars)
+  const barsSold = r.sellBars === false ? 0 : Math.min(Math.max(0, bars - (r.barsReserve || 0)), capacity / BAR_RAW);
   bars -= barsSold;
   capacity -= barsSold * BAR_RAW;
+  // crates first (they fetch more), then loose raw above the floor
+  const packedSold = r.sellRaw === false ? 0 : Math.min(packed, capacity);
+  packed -= packedSold;
+  capacity -= packedSold;
   // K62: sales only take what lies above the Rohkristall-Reserve (processing above may use the reserve)
-  const rawSold = Math.min(Math.max(0, depot - (r.rawReserve || 0)), capacity);
+  const rawSold = r.sellRaw === false ? 0 : Math.min(Math.max(0, depot - (r.rawReserve || 0)), capacity);
   depot -= rawSold;
   // Overflow is pushed back upstream (never destroyed).
   if (hopper > r.hopperCap && fed > 0) {
@@ -601,7 +766,10 @@ function simulateColonyFlow(stock, r, a, dt) {
     extracted -= idle;
   }
   return {
-    stock: { pile, depot, hopper, bars, frost, cells, ember, emberAlloy, precisionOre, precisionParts, spores, biogel },
+    stock: { pile, depot, hopper, bars, frost, cells, ember, emberAlloy, precisionOre, precisionParts, spores, biogel, packed, resin },
+    resinExtracted,
+    packedNow,
+    packedSold,
     extracted,
     alloysMade,
     partsMade,
@@ -633,7 +801,10 @@ function specialistActiveOnSales(id) {
 const industryFlow = []; // last measured flow per colony (for visuals; not saved)
 const crystalCarry = []; // Nibbles' rare finds (fractional, not saved)
 const deepCarry = {}; // deep-shaft finds per colony and shaft (fractional, not saved)
-const FLOW_SUM = ['extracted', 'inflow', 'moved', 'fed', 'processed', 'barsSold', 'rawSold', 'frostExtracted', 'cellsMade', 'alloysMade', 'coolantUsed', 'partsMade', 'sporesExtracted', 'gelMade', 'lifted', 'manual'];
+// Beta 1.7: production runs in steps of at most 1 s (the cart line and the Halde buffer are physical time constants);
+// the cap only guards absurd spans (> 30 h, beyond every offline limit).
+const OFFLINE_CHUNK_MAX = 108000;
+const FLOW_SUM = ['resinExtracted', 'packedNow', 'packedSold', 'extracted', 'inflow', 'moved', 'fed', 'processed', 'barsSold', 'rawSold', 'frostExtracted', 'cellsMade', 'alloysMade', 'coolantUsed', 'partsMade', 'sporesExtracted', 'gelMade', 'lifted', 'manual'];
 // One production call for the colony in context. With the underground open the call is cut into chunks (≤ 1 s for
 // ticks, ≤ seconds/4000 offline) that alternate the discrete underground (deepcore.js) and the surface flow, so the
 // pile the elevator unloads into is drained by the rail in between. Construction advances in the same chunks: a
@@ -649,9 +820,16 @@ function runColonyIndustry(seconds, efficiency = 1) {
     total = Object.fromEntries(FLOW_SUM.map(key => [key, 0])),
     mined = {},
     deposited = {};
-  const chunks = open && seconds > 1 ? Math.min(4000, Math.ceil(seconds)) : 1,
+  // Beta 1.7 M2/M3: every call is cut into chunks of at most 1 s (offline too), with or without the
+  // underground, and production orders run inside the same chunks (they see the depot between the steps, not after
+  // the whole call has sold it). Ten 60-s steps and one 600-s step therefore run the same 600 chunks.
+  const fabActive = Boolean(colony.fab?.orders?.length) && typeof stepFabrication === 'function',
+    chunks = seconds > 1 ? Math.min(OFFLINE_CHUNK_MAX, Math.ceil(seconds)) : 1,
     h = seconds / chunks;
   let nums = open ? undergroundNumbers(index) : null;
+  // Beta 1.7 M3: with a rail manager the line runs as real carts (transport.js); carts already out finish their trip
+  const carts = typeof stepSurfaceTransport === 'function',
+    flowAuto = carts ? { ...auto, rail: false } : auto;
   for (let i = 0; i < chunks && seconds > 0; i++) {
     if (open) {
       if (constructionJob(index) && advanceConstruction(h, index)) nums = undergroundNumbers(index);
@@ -663,6 +841,18 @@ function runColonyIndustry(seconds, efficiency = 1) {
         mined[id] = (mined[id] || 0) + value;
         if (shaftMaterial(id, index) === 'raw') total.extracted += value;
       });
+    }
+    // the depot is a pass-through within the chunk (transport.js): a cart may tip what sales, feed and processing take
+    const through =
+        h *
+        ((auto.stall ? rates.S1 : 0) + (auto.dock ? rates.S2 : 0) + (auto.depot ? rates.F : 0) + (rates.PK || 0) + (rates.TR || 0) * RAW_PER_CELL +
+          (rates.FD || 0) * 1.5 * RAW_PER_ALLOY + (rates.WS || 0) * RAW_PER_PART + (rates.BL || 0) * RAW_PER_GEL),
+      cartMoved = carts && (auto.rail || colony.transit?.carts?.length) ? stepSurfaceTransport(index, h, { rate: rates.L, auto: auto.rail, depotCap: rates.depotCap, through }).moved : 0;
+    total.moved += cartMoved;
+    if (fabActive) {
+      rates.rawReserve = rawSaleFloor(index);
+      rates.fabReserve = fabReserveUnits(index);
+      rates.barsReserve = colonyAlloc(index).priority !== 'sale' && typeof fabDemand === 'function' ? fabDemand(index, 'bars') : 0;
     }
     const flow = simulateColonyFlow(
       {
@@ -677,10 +867,12 @@ function runColonyIndustry(seconds, efficiency = 1) {
         precisionOre: colony.stock.precisionOre || 0,
         precisionParts: colony.stock.precisionParts || 0,
         spores: colony.stock.spores || 0,
-        biogel: colony.stock.biogel || 0
+        biogel: colony.stock.biogel || 0,
+        packed: colony.stock.packed || 0,
+        resin: colony.stock.resin || 0
       },
       rates,
-      auto,
+      flowAuto,
       h
     );
     colony.stock.pile = flow.stock.pile;
@@ -694,11 +886,23 @@ function runColonyIndustry(seconds, efficiency = 1) {
     colony.stock.precisionParts = flow.stock.precisionParts;
     colony.stock.spores = flow.stock.spores;
     colony.stock.biogel = flow.stock.biogel;
+    colony.stock.packed = flow.stock.packed;
+    colony.stock.resin = flow.stock.resin;
     state.planetOps.storage[index] = flow.stock.depot;
+    // what this chunk's carts tipped beyond the depot's capacity and nobody took goes back onto the cart
+    const back = Math.min(cartMoved, flow.stock.depot - rates.depotCap);
+    if (back > 1e-9) {
+      cartTakeBack(index, back);
+      state.planetOps.storage[index] -= back;
+      total.moved -= back;
+    }
     FLOW_SUM.forEach(key => {
       if (key !== 'lifted' && key !== 'manual') total[key] += flow[key] || 0;
     });
+    if (fabActive) stepFabrication(index, h * efficiency);
   }
+  // Beta 1.7 M7: deep shafts (depth 3+) find Fundstücke by what they really mined (bounded, see artifacts.js)
+  if (open && typeof artifactProgress === 'function') artifactProgress(index, mined);
   if (open) {
     total.inflow = total.lifted;
     // Finds of deep shafts (Tiefendruse/Resonanzkammer: crystals, Verdichtete Adern: ore) while they really mine.
@@ -710,14 +914,23 @@ function runColonyIndustry(seconds, efficiency = 1) {
       const found = Math.floor(deepCarry[key]);
       if (!found) return;
       deepCarry[key] -= found;
-      if (finds.kind === 'crystals') state.crystals += found;
-      else state.ore += found;
+      // Beta 1.7 M8: the Aderkarte doubles what a find brings
+      const gain = found * (typeof techFindsMultiplier === 'function' ? techFindsMultiplier() : 1);
+      if (finds.kind === 'crystals') state.crystals += gain;
+      else state.ore += gain;
     });
   }
-  const credits = (total.rawSold + total.barsSold * barValue()) * salePriceMultiplier(fill) * efficiency;
+  // Beta 1.7 M2: the book – what this call mined/extracted and what it sold or consumed
+  if (open) Object.entries(mined).forEach(([id, value]) => ledgerBook('created', index, shaftMaterial(id, index), value));
+  else ledgerBook('created', index, 'raw', total.extracted);
+  ledgerBook('created', index, 'frost', total.frostExtracted);
+  ledgerBook('created', index, 'spores', total.sporesExtracted);
+  ledgerBook('created', index, 'resin', total.resinExtracted);
+  ledgerBook('destroyed', index, 'raw', total.rawSold + total.packedSold + total.barsSold * BAR_RAW + total.cellsMade * RAW_PER_CELL + total.alloysMade * RAW_PER_ALLOY + total.partsMade * RAW_PER_PART + total.gelMade * RAW_PER_GEL);
+  const credits = (total.rawSold + total.packedSold * packPremium() + total.barsSold * barValue()) * salePriceMultiplier(fill) * efficiency * (typeof coreSaleFactor === 'function' ? coreSaleFactor(index) : 1);
   if (credits > 0) {
-    earn(credits);
-    GameEvents.emit('sale', { credits, amount: total.rawSold + total.barsSold * BAR_RAW, auto: true, planet: index, workplace: auto.stall ? 'stall' : 'dock' });
+    earn(credits, 'sale:auto');
+    GameEvents.emit('sale', { credits, amount: total.rawSold + total.packedSold + total.barsSold * BAR_RAW, auto: true, planet: index, workplace: auto.stall ? 'stall' : 'dock' });
   }
   if (total.extracted > 0 && secondaryActive('nibbles')) {
     crystalCarry[index] = (crystalCarry[index] || 0) + seconds / 900;
@@ -727,9 +940,10 @@ function runColonyIndustry(seconds, efficiency = 1) {
       crystalCarry[index] -= found;
     }
   }
-  const delivered = total.rawSold + total.barsSold * BAR_RAW;
+  const delivered = total.rawSold + total.packedSold + total.barsSold * BAR_RAW;
   trackWeeklySales(delivered);
   if (seconds > 0) industryFlow[index] = { ...total, mined, deposited, credits, seconds, at: Date.now() };
+  if (seconds > 0 && seconds <= 30) updateFlowRates(index, total, seconds);
   return delivered;
 }
 // Steady automated income (units/s ≈ credits/s) of the colony in context; manual stages count as 0.
@@ -744,6 +958,90 @@ function automatedIncomeRate() {
     supply = Math.min(automatedExtraction(r, a), a.rail ? r.L : 0),
     depot = sellableRaw(); // K62: reserved raw is not for sale (else a held reserve would show the full sale capacity)
   return Math.min(sell, depot > 1 ? sell : supply);
+}
+// ----- Beta 1.7 M4: measured throughput and station diagnosis -----
+// Per-second flows over the last 60 s of play (a sliding window; online ticks only, offline catch-ups are not
+// "measured"). Batches (carts, crates, elevator trips) arrive in pulses; the window turns them into a steady rate.
+const flowRates = [];
+const FLOW_WINDOW = 60;
+function updateFlowRates(index, total, seconds) {
+  const e = flowRates[index] || (flowRates[index] = { age: 0, ticks: [] });
+  e.ticks.push({ seconds, ...Object.fromEntries(FLOW_SUM.map(key => [key, total[key] || 0])) });
+  let span = e.ticks.reduce((s, t) => s + t.seconds, 0);
+  while (e.ticks.length > 1 && span - e.ticks[0].seconds >= FLOW_WINDOW) span -= e.ticks.shift().seconds;
+  e.age += seconds;
+  e.span = span;
+}
+function measuredRate(key, planet = state.activePlanet) {
+  const e = flowRates[planet];
+  if (!e?.span) return 0;
+  return e.ticks.reduce((s, t) => s + t[key], 0) / e.span;
+}
+// One station's throughput: what it really moved per second, what it could move, and why it is below that.
+// status: 'manual' (no manager), 'full' (≥ 95 % used), 'starved' (a processing station waits for input it should
+// get), 'spare' (more capacity than arrives – upstream sets the pace),
+// 'blocked' (output full), 'ok'. hint: a short reason; action: a one-tap fix the sheet offers.
+function stationReport(workplace, planet = state.activePlanet) {
+  return withPlanet(planet, () => {
+    const r = colonyRates(),
+      a = colonyAutomation(planet),
+      c = colonyAt(planet),
+      depot = state.planetOps.storage[planet] || 0,
+      sale = (a.stall ? r.S1 : 0) + (a.dock ? r.S2 : 0),
+      m = key => measuredRate(key, planet),
+      warm = (flowRates[planet]?.age || 0) >= 8;
+    const report = (rate, cap, unit = '/s') => ({ workplace, rate, cap, unit, use: cap > 0 ? Math.min(1, rate / cap) : 0, status: 'ok', hint: '', action: null, warm });
+    let rep;
+    if (workplace === 'mine') {
+      rep = report(r.open ? m('lifted') : m('extracted'), r.open ? Math.min(automatedExtraction(r, a), r.EL || Infinity) : a.mine ? r.E : 0);
+      if (!r.open && c.stock.pile >= r.pileCap * 0.95) Object.assign(rep, { status: 'blocked', hint: 'Die Halde ist voll – die Lorenbahn holt zu wenig ab.' });
+    } else if (workplace === 'rail') {
+      rep = report(m('moved'), r.L);
+      if (depot >= r.depotCap * 0.95) Object.assign(rep, { status: 'blocked', hint: 'Das Lager ist voll – die Loren warten mit ihrer Ladung.' });
+      else if (c.stock.pile < 1 && rep.use < 0.5) Object.assign(rep, { status: 'spare', hint: 'Die Loren schaffen mehr, als der Abbau liefert.' });
+    } else if (workplace === 'depot') {
+      rep = report(m('fed'), industryLevel('refinery') > 0 ? r.F : 0);
+      if (rep.cap > 0 && depot < 1 && rep.use < 0.5) Object.assign(rep, { status: 'starved', hint: 'Kein Rohkristall im Lager für die Beschickung.' });
+    } else if (workplace === 'sorter') {
+      rep = report(m('packedNow'), r.PK);
+      if ((c.stock.packed || 0) >= (r.packCap || 0) * 0.95) Object.assign(rep, { status: 'blocked', hint: 'Das Kistenlager ist voll – der Verkauf holt zu wenig ab.' });
+      else if (rep.use < 0.5 && depot <= (r.rawReserve || 0) + 1) Object.assign(rep, { status: 'starved', hint: 'Nur Rohkristalle über dem Mindestbestand werden verpackt.' });
+    } else if (workplace === 'refinery') {
+      rep = report(m('processed'), r.P);
+      const fedEnough = a.depot;
+      if (rep.cap > 0 && c.stock.bars >= r.barCap * 0.95 && !a.stall && !a.dock) Object.assign(rep, { status: 'blocked', hint: 'Das Barrenlager ist voll – niemand verkauft Barren.' });
+      else if (rep.cap > 0 && !fedEnough) Object.assign(rep, { status: 'starved', hint: 'Raffinerie wartet auf Rohkristalle – ohne Lager-Manager beschickt niemand den Trichter.', action: { label: 'LAGERHAUS ÖFFNEN', sheet: 2 } });
+      else if (rep.cap > 0 && rep.use < 0.8 && c.stock.hopper < r.P * 0.5) {
+        const keep = Math.max(50, Math.ceil((r.P * 30) / 50) * 50),
+          option = ALLOC_KEEP_OPTIONS.find(n => n >= keep) || ALLOC_KEEP_OPTIONS[ALLOC_KEEP_OPTIONS.length - 1],
+          sold = m('rawSold') + m('packedSold');
+        // raw is being sold while the refinery waits: the Verteilung decides; otherwise the feed or the supply is the limit
+        if (sold > r.P * 0.05)
+          Object.assign(
+            rep,
+            colonyAlloc(planet).priority === 'sale'
+              ? { status: 'starved', hint: 'Raffinerie wartet auf Rohkristalle – der Verkauf hat Vorrang.', action: { label: 'PRODUKTION ZUERST', alloc: { priority: 'production' } } }
+              : { status: 'starved', hint: 'Raffinerie wartet auf Rohkristalle – reserviere ' + fmt(option) + ' Rohkristalle für die Raffinerie.', action: { label: 'MINDESTBESTAND ' + fmt(option), alloc: { keep: option } } }
+          );
+        else if (r.F < r.P * 0.9) Object.assign(rep, { status: 'starved', hint: 'Die Beschickung ist zu langsam – das Lagerhaus ausbauen.', action: { label: 'LAGERHAUS ÖFFNEN', sheet: 2 } });
+        else Object.assign(rep, { status: 'spare', hint: 'Die Raffinerie schafft mehr, als ankommt.' });
+      }
+    } else if (workplace === 'stall' || workplace === 'dock') {
+      rep = report(m('rawSold') + m('packedSold') + m('barsSold') * BAR_RAW, sale);
+      if (rep.use < 0.5 && depot <= (r.rawReserve || 0) + 1 && c.stock.bars < 1 && (c.stock.packed || 0) < 1) Object.assign(rep, { status: 'spare', hint: 'Der Verkauf schafft mehr, als ankommt.' });
+    } else if (workplace === 'elevator' && r.open) {
+      // exact from the trip log when there are trips: what the cabin brought up per second between its arrivals
+      const log = typeof liftTripLog === 'function' ? liftTripLog(planet) : null,
+        trips = log?.at || [],
+        span = trips.length >= 3 ? trips[trips.length - 1] - trips[0] : 0;
+      const lifted = span > 0 ? log.last.slice(-trips.length + 1).reduce((s, v) => s + v, 0) / span : m('lifted');
+      // elevatorRate() assumes full trips over every ramp; a cabin that only serves the upper ramps is faster than that
+      rep = report(lifted, Math.max(r.EL, lifted));
+    } else return null;
+    if (!isAutomated(workplace, planet) && workplace !== 'elevator') Object.assign(rep, { status: 'manual', hint: rep.hint || 'Handbetrieb – ein Manager übernimmt diese Station.' });
+    else if (rep.status === 'ok' && rep.use >= 0.95) rep.status = 'full';
+    return rep;
+  });
 }
 function stageBottleneck() {
   const r = colonyRates(),
@@ -772,6 +1070,11 @@ function stageBottleneck() {
   }
   if (sell < Math.min(supply, r.L) * 0.98) return { id: 'stall', text: 'Der Verkauf ist der Engpass.' };
   if (r.L < supply * 0.98) return { id: 'rail', text: 'Die Lorenbahn ist der Engpass.' };
+  // Beta 1.7 M4: a processing station that really waits (measured, after ~8 s of play)
+  if (a.refinery) {
+    const ref = stationReport('refinery');
+    if (ref?.warm && ref.status === 'starved') return { id: 'refinery', text: ref.hint };
+  }
   return { id: 'mine', text: 'Die Förderung bestimmt dein Tempo.' };
 }
 
@@ -782,6 +1085,7 @@ function manualBatch(workplace) {
   if (workplace === 'stall') return Math.max(30, r.S1 * 6);
   if (workplace === 'dock') return Math.max(100, r.S2 * 6);
   if (workplace === 'depot') return Math.max(50, r.F * 6);
+  if (workplace === 'sorter') return Math.max(40, r.PK * 6);
   if (workplace === 'refinery') return Math.max(BAR_RAW * 5, r.P * 6);
   if (workplace === 'frostDrill') return Math.max(4, r.FR * 8);
   if (workplace === 'sporeGarden') return Math.max(4, r.SP * 8);
@@ -794,6 +1098,7 @@ function addToPile(amount) {
     room = Math.max(0, pileCapacity() - colony.stock.pile),
     added = Math.min(room, Math.max(0, amount));
   colony.stock.pile += added;
+  ledgerBook('created', state.activePlanet, 'raw', added);
   return added;
 }
 // Manual cart trips are real state: the load leaves the pile at departure and reaches the depot on arrival.
@@ -838,15 +1143,39 @@ function manualSale(workplace = 'stall') {
   let capacity = manualBatch(workplace);
   const bars = Math.min(colony.stock.bars, capacity / BAR_RAW);
   capacity -= bars * BAR_RAW;
-  const raw = Math.min(Math.max(0, depot - rawReserveUnits(index)), capacity);
-  if (bars + raw <= 0) return { units: 0, credits: 0 };
+  const crates = Math.min(colony.stock.packed || 0, capacity);
+  capacity -= crates;
+  const raw = Math.min(Math.max(0, depot - rawSaleFloor(index)), capacity);
+  if (bars + crates + raw <= 0) return { units: 0, credits: 0 };
   colony.stock.bars -= bars;
+  colony.stock.packed = (colony.stock.packed || 0) - crates;
   state.planetOps.storage[index] = depot - raw;
-  const credits = (raw + bars * barValue()) * salePriceMultiplier(fill);
-  earn(credits);
-  const units = raw + bars * BAR_RAW;
+  const credits = (raw + crates * packPremium() + bars * barValue()) * salePriceMultiplier(fill) * (typeof coreSaleFactor === 'function' ? coreSaleFactor(index) : 1);
+  ledgerBook('destroyed', index, 'raw', raw + crates + bars * BAR_RAW);
+  earn(credits, 'sale:manual');
+  const units = raw + crates + bars * BAR_RAW;
   trackWeeklySales(units);
   return { units, credits };
+}
+// Beta 1.7 M5: one tap at the Harzbohrturm pumps a few seconds' worth into the tanks
+function manualResin() {
+  const colony = colonyAt(),
+    amount = Math.min(Math.max(2, resinRate() * 10), Math.max(0, resinCapacity() - (colony.stock.resin || 0)));
+  if (amount <= 0 || !workplaceExists('resinDrill')) return 0;
+  colony.stock.resin = (colony.stock.resin || 0) + amount;
+  ledgerBook('created', state.activePlanet, 'resin', amount);
+  return amount;
+}
+// Beta 1.7 M2: one tap at the Packstation packs a batch of sellable raw into crates
+function manualPack() {
+  const index = state.activePlanet,
+    colony = colonyAt(),
+    depot = state.planetOps.storage[index] || 0,
+    amount = Math.min(manualBatch('sorter'), Math.max(0, depot - rawSaleFloor(index)), Math.max(0, packCapacity() - (colony.stock.packed || 0)));
+  if (amount <= 0 || !workplaceExists('sorter')) return 0;
+  state.planetOps.storage[index] = depot - amount;
+  colony.stock.packed = (colony.stock.packed || 0) + amount;
+  return amount;
 }
 function manualFeed() {
   const index = state.activePlanet,
@@ -875,6 +1204,7 @@ function manualThermal() {
   if (cells <= 0 || !workplaceExists('thermal')) return 0;
   colony.stock.frost -= cells * FROST_PER_CELL;
   state.planetOps.storage[index] = depot - cells * RAW_PER_CELL;
+  ledgerBook('destroyed', index, 'raw', cells * RAW_PER_CELL);
   colony.stock.cells += cells;
   return cells;
 }

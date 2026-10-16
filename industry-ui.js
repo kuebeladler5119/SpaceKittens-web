@@ -2,8 +2,10 @@
 // specialist assignment and one-time milestone rewards. Loaded after game.js (uses its globals).
 
 // Building-sheet keys: legacy building index or industry building id → workplace (null = no workplace).
-const SHEET_WORKPLACE = { 0: 'mine', 1: null, 2: 'depot', 3: 'dock', rail: 'rail', stall: 'stall', refinery: 'refinery', frostDrill: 'frostDrill', thermal: 'thermal', foundry: 'foundry', workshop: 'workshop', sporeGarden: 'sporeGarden', biolab: 'biolab' };
+const SHEET_WORKPLACE = { 0: 'mine', 1: null, 2: 'depot', 3: 'dock', rail: 'rail', stall: 'stall', refinery: 'refinery', frostDrill: 'frostDrill', thermal: 'thermal', foundry: 'foundry', workshop: 'workshop', sporeGarden: 'sporeGarden', biolab: 'biolab', sorter: 'sorter', resinDrill: 'resinDrill' };
 const INDUSTRY_ROLE = {
+  resinDrill: 'Pumpt Sternenharz aus der Tiefe der Kristallebene in seine Tanks. Die Fertigung macht daraus Sternentreibstoff (füllt den Schiffstank), Funkel-Schmiermittel, Kristallgel und Sternenpolymer.',
+  sorter: 'Sortiert Rohkristalle aus dem Lager in Kisten. Der Verkauf nimmt zuerst Kisten und zahlt +15 % – verpackte Ware ist mehr wert.',
   sporeGarden: 'Kätzchen ernten Leuchtsporen von den Riesenblüten. Die Sporen speisen das Biolabor.',
   biolab: 'Setzt aus 3 Leuchtsporen + 25 Rohkristallen aus dem Lager 1 Biogel an. Biogel heilt Wurzeln und ist begehrte Ware.',
   rail: 'Loren bringen Rohkristalle von der Halde ins Lagerhaus. Ab Lv 10 Rover, ab 25 Förderband.',
@@ -26,8 +28,22 @@ const MANUAL_ACTIONS = {
   foundry: () => smeltAlloy(),
   workshop: () => assembleParts(),
   sporeGarden: () => harvestSpores(),
-  biolab: () => brewBiogel()
+  biolab: () => brewBiogel(),
+  sorter: () => packCrates(),
+  resinDrill: () => pumpResin()
 };
+function pumpResin() {
+  const amount = manualResin();
+  if (amount <= 0) return toast('Die Harztanks sind voll – die Fertigung braucht sie für Sternentreibstoff und Chemie.');
+  feedback('collect', 'light');
+  render();
+}
+function packCrates() {
+  const amount = manualPack();
+  if (amount <= 0) return toast('Nichts zu packen: Das Lager hat keine verkaufbaren Rohkristalle über dem Mindestbestand, oder das Kistenlager ist voll.');
+  feedback('collect', 'light');
+  render();
+}
 function harvestSpores() {
   const amount = manualSpores();
   if (amount <= 0) return toast('Das Sporenlager ist voll.');
@@ -170,6 +186,8 @@ function industryEffectText(id) {
   if (id === 'workshop') return 'Präzisionsbauteile ' + (workshopRate() * 60).toFixed(1).replace('.', ',') + ' → ' + (gain(level + 1) * workplaceEfficiency('workshop') * 60).toFixed(1).replace('.', ',') + ' /min';
   if (id === 'sporeGarden') return 'Leuchtsporen ' + fmt(sporeRate()) + ' → ' + fmt(gain(level + 1) * workplaceEfficiency('sporeGarden') * rootBoost('sporeGarden')) + ' /s';
   if (id === 'biolab') return 'Biogel ' + (biogelRate() * 60).toFixed(1).replace('.', ',') + ' → ' + (gain(level + 1) * workplaceEfficiency('biolab') * viridiaBoost('biolab') * rootBoost('biolab') * 60).toFixed(1).replace('.', ',') + ' /min';
+  if (id === 'resinDrill') return 'Sternenharz ' + (resinRate() * 60).toFixed(1).replace('.', ',') + ' → ' + (INDUSTRY_BUILDINGS.resinDrill.perLevel * (level + 1) * workplaceEfficiency('resinDrill') * 60).toFixed(1).replace('.', ',') + ' /min · Tanks ' + fmt(colonyAt().stock.resin || 0) + ' / ' + fmt(resinCapacity());
+  if (id === 'sorter') return 'Packen ' + fmt(packRate()) + ' → ' + fmt(gain(level + 1) * workplaceEfficiency('sorter')) + ' /s · Kisten ' + fmt(colonyAt().stock.packed || 0) + ' / ' + fmt(packCapacity());
   return 'Verarbeitung ' + fmt(refineryRate()) + ' → ' + fmt(gain(level + 1) * workplaceEfficiency('refinery')) + ' Rohkristalle/s';
 }
 function stockChips(workplace) {
@@ -177,7 +195,12 @@ function stockChips(workplace) {
     depot = state.planetOps.storage[state.activePlanet] || 0,
     chips = [];
   if (['mine', 'rail'].includes(workplace)) chips.push('Halde ' + fmt(colony.stock.pile) + ' / ' + fmt(pileCapacity()));
-  if (['rail', 'depot', 'stall', 'dock'].includes(workplace)) chips.push('Lager ' + fmt(depot) + ' / ' + fmt(storageCapacity()));
+  if (['rail', 'depot', 'stall', 'dock', 'sorter'].includes(workplace)) chips.push('Lager ' + fmt(depot) + ' / ' + fmt(storageCapacity()));
+  if (workplace === 'resinDrill') {
+    chips.push('✺ Sternenharz ' + fmt(colony.stock.resin || 0) + ' / ' + fmt(resinCapacity()));
+    chips.push('⚗ Sternentreibstoff ' + fmt(colony.goods?.starFuel || 0) + ' · Tank ' + fmt(state.fuel) + ' / ' + fmt(fuelTankCapacity()));
+  }
+  if (['sorter', 'stall', 'dock'].includes(workplace) && workplaceExists('sorter')) chips.push('📦 Kisten ' + fmt(colony.stock.packed || 0) + ' / ' + fmt(packCapacity()));
   if (['stall', 'dock'].includes(workplace) && rawReserveUnits() > 0) chips.push('🔒 Reserve ' + fmt(rawReserveUnits()) + ' bleibt im Lager');
   if (['depot', 'refinery'].includes(workplace) && workplaceExists('refinery')) chips.push('Trichter ' + fmt(colony.stock.hopper) + ' / ' + fmt(hopperCapacity()));
   if (['refinery', 'stall', 'dock'].includes(workplace) && workplaceExists('refinery')) chips.push('Barren ' + fmt(colony.stock.bars) + ' / ' + fmt(barCapacity()));
@@ -223,11 +246,73 @@ function reserveRow(workplace) {
     n => `<button role="radio" aria-checked="${n === charges}" class="${n === charges ? 'active' : ''}" data-reserve="${n}">${label(n)}</button>`
   ).join('')}</div><p class="reserve-facts"><span>geschützt ${fmt(units)}</span><span>Lager ${fmt(depot)}</span><span>verkaufbar ${fmt(sellableRaw(index))}</span><span>1 Charge = ${fmt(size)} (1 ${product}: ${need})</span><span class="${ready ? 'ok' : 'short'}">${ready ? '✓ Handbetrieb möglich' : '✕ Für Handbetrieb fehlen ' + fmt(Math.ceil(need - depot)) + ' Rohkristalle'}</span>${!charges && sales && !isAutomated(workplace) ? '<span class="short">Händler verkaufen sonst alles</span>' : ''}</p></div>`;
 }
+// Beta 1.7 M2: Verteilung of the depot (sheet level 2 of the depot, refinery, stall and dock). Sell surplus raw / bars,
+// a minimum stock, and whether production orders come before the sale. The live line shows where the raw goes.
+const ALLOC_SHEETS = ['depot', 'sorter', 'refinery', 'stall', 'dock'];
+function allocRow(workplace) {
+  if (!ALLOC_SHEETS.includes(workplace) || !workplaceExists(workplace)) return '';
+  const index = state.activePlanet,
+    a = colonyAlloc(index),
+    depot = state.planetOps.storage[index] || 0,
+    fab = fabReserveUnits(index),
+    floor = rawSaleFloor(index),
+    toggle = (key, label) => `<button role="switch" aria-checked="${a[key]}" class="${a[key] ? 'active' : ''}" data-alloc="${key}">${label}: ${a[key] ? 'AN' : 'AUS'}</button>`,
+    keep = ALLOC_KEEP_OPTIONS.map(n => `<button role="radio" aria-checked="${n === a.keep}" class="${n === a.keep ? 'active' : ''}" data-alloc-keep="${n}">${n ? fmt(n) : 'Keiner'}</button>`).join(''),
+    first = [['production', 'Produktion zuerst'], ['sale', 'Verkauf zuerst']].map(([id, label]) => `<button role="radio" aria-checked="${a.priority === id}" class="${a.priority === id ? 'active' : ''}" data-alloc-priority="${id}">${label}</button>`).join('');
+  return `<div class="sheet-reserve sheet-alloc"><div class="reserve-head"><b>Verteilung</b><small>Was das Lager automatisch verkauft und was es für deine Produktion behält.</small></div><div class="reserve-options alloc-sell">${toggle('sellRaw', 'Rohkristalle verkaufen')}${toggle('sellBars', 'Barren verkaufen')}</div><div class="reserve-head"><small>Mindestbestand Rohkristalle</small></div><div class="reserve-options alloc-keep" role="radiogroup" aria-label="Mindestbestand">${keep}</div><div class="reserve-options alloc-sell" role="radiogroup" aria-label="Vorrang">${first}</div><p class="reserve-facts"><span>Lager ${fmt(depot)}</span>${fab > 0 ? `<span class="ok">Für Aufträge reserviert ${fmt(fab)}</span>` : ''}<span>Verkauf ab ${fmt(floor)}</span><span>${a.sellRaw ? 'verkaufbar ' + fmt(Math.max(0, depot - floor)) : 'Rohkristalle bleiben im Lager'}</span></p></div>`;
+}
 // What the manager's training does at this workplace (the elevator manager improves routing, not throughput).
 function managerEffectText(workplace) {
   if (workplace === 'elevator' && typeof elevatorTrainingText === 'function') return elevatorTrainingText();
   return '×' + workplaceEfficiency(workplace).toFixed(2);
 }
+// Beta 1.7 M4: the station's measured throughput, its use and what holds it back (with a one-tap fix when there is one)
+const STATION_STATUS = { ok: ['läuft', 'ok'], full: ['voll ausgelastet', 'full'], starved: ['wartet auf Nachschub', 'warn'], blocked: ['staut sich', 'warn'], spare: ['hat Luft', 'ok'], manual: ['Handbetrieb', 'idle'] };
+function stationRow(workplace) {
+  if (typeof stationReport !== 'function' || !workplaceExists(workplace)) return '';
+  const rep = stationReport(workplace);
+  if (!rep) return '';
+  const [label, cls] = STATION_STATUS[rep.status] || STATION_STATUS.ok,
+    rate = v => (v > 0 && v < 10 ? v.toFixed(1).replace('.', ',') : fmt(v)),
+    action = rep.action ? `<button class="station-fix" data-station-fix='${JSON.stringify(rep.action).replace(/'/g, '&#39;')}'>${rep.action.label}</button>` : '';
+  return `<div class="sheet-station ${cls}"><div class="station-head"><b>Durchsatz ${rate(rep.rate)} / ${rate(rep.cap)} ${rep.unit}</b><em>${label}</em></div><i class="station-bar"><u style="width:${Math.round(rep.use * 100)}%"></u></i>${rep.hint ? '<small>' + rep.hint + '</small>' : ''}${action}</div>`;
+}
+document.addEventListener('click', event => {
+  const fix = event.target.closest('[data-station-fix]');
+  if (!fix) return;
+  let action = null;
+  try {
+    action = JSON.parse(fix.dataset.stationFix);
+  } catch {}
+  if (!action) return;
+  if (action.alloc) {
+    const a = colonyAlloc();
+    if (action.alloc.keep !== undefined && ALLOC_KEEP_OPTIONS.includes(action.alloc.keep)) a.keep = action.alloc.keep;
+    if (action.alloc.priority) a.priority = action.alloc.priority === 'sale' ? 'sale' : 'production';
+    requestSave(200);
+  }
+  feedback('open');
+  if (action.sheet !== undefined) return openBuildingSheet(action.sheet);
+  renderBuildingSheet();
+});
+// Beta 1.7 M5: the drill station's sheet shows the fuel it feeds and offers TANKEN (up to the full tank)
+function refuelRow(workplace) {
+  if (workplace !== 'resinDrill' || !workplaceExists('resinDrill')) return '';
+  const fuel = colonyAt().goods?.starFuel || 0,
+    room = Math.floor((fuelTankCapacity() - state.fuel) / STAR_FUEL_UNITS),
+    n = Math.min(Math.floor(fuel), room);
+  return `<div class="sheet-reserve"><div class="reserve-head"><b>⚗ Sternentreibstoff ${fmt(fuel)}</b><small>Tank ${fmt(state.fuel)} / ${fmt(fuelTankCapacity())}. Unter halbem Tank füllt die Kolonie selbst nach (1 Einheit = ${STAR_FUEL_UNITS} Treibstoff). Hergestellt in der Fertigung aus 8 Sternenharz.</small></div><button class="station-fix" data-refuel ${n > 0 ? '' : 'disabled'}>${n > 0 ? 'TANKEN · +' + n * STAR_FUEL_UNITS + ' TREIBSTOFF' : fuel >= 1 ? 'TANK VOLL' : 'KEIN STERNENTREIBSTOFF'}</button></div>`;
+}
+document.addEventListener('click', event => {
+  if (!event.target.closest('[data-refuel]')) return;
+  const n = refuelFromStarFuel(state.activePlanet, true);
+  if (n > 0) {
+    toast('Getankt: +' + n * STAR_FUEL_UNITS + ' Treibstoff');
+    feedback('collect', 'light');
+  }
+  renderBuildingSheet();
+  render();
+});
 function managerRow(workplace) {
   if (!workplaceExists(workplace)) return '';
   const job = WORKPLACE[workplace].job,
@@ -255,6 +340,12 @@ function managerRow(workplace) {
       .join('')}</div>`;
   return html;
 }
+let sheetDetailsOpen = false;
+document.addEventListener('click', event => {
+  if (!event.target.closest('[data-sheet-more]')) return;
+  sheetDetailsOpen = !sheetDetailsOpen;
+  renderBuildingSheet();
+});
 function renderIndustrySheet(sheet, key) {
   const workplace = SHEET_WORKPLACE[key] ?? null,
     legacy = typeof key === 'number';
@@ -297,9 +388,12 @@ function renderIndustrySheet(sheet, key) {
     batchBar = level && unlocked && typeof batchToggleHTML === 'function' ? batchToggleHTML() : '';
   }
   const manual = workplace && workplaceExists(workplace) ? `<button class="sheet-manual" data-manual="${workplace}">${WORKPLACE[workplace].verb}</button>` : '';
+  // Beta 1.7: level 1 (what it does, its manager, special actions, the upgrade) first; level 2 (stocks and the
+  // distribution) behind "Details"; the K62 recipe reserve of specialty buildings stays on level 1, so the upgrade button is in reach on a phone without scrolling the panel
+  const details = workplace ? stockChips(workplace) + allocRow(workplace) : '';
   setHTML(
     sheet,
-    `<button class="sheet-close" data-close-sheet aria-label="Schließen">×</button><div class="sheet-head"><span>${icon}</span><div><b>${title}</b><small>${role}</small></div></div><p class="sheet-effect">${effect}</p>${workplace ? stockChips(workplace) : ''}${workplace ? reserveRow(workplace) : ''}${workplace ? managerRow(workplace) : ''}${window.sheetExtra?.(key) || ''}${batchBar}<div class="sheet-actions">${manual}${buy}</div>`
+    `<button class="sheet-close" data-close-sheet aria-label="Schließen">×</button><div class="sheet-head"><span>${icon}</span><div><b>${title}</b><small>${role}</small></div></div><p class="sheet-effect">${effect}</p>${workplace ? stationRow(workplace) : ''}${workplace ? refuelRow(workplace) : ''}${workplace ? reserveRow(workplace) : ''}${workplace ? managerRow(workplace) : ''}${window.sheetExtra?.(key) || ''}${batchBar}<div class="sheet-actions">${manual}${buy}</div>${details ? `<button class="sheet-more" data-sheet-more aria-expanded="${sheetDetailsOpen}">${sheetDetailsOpen ? 'Details ▴' : 'Details: Lager und Verteilung ▾'}</button>${sheetDetailsOpen ? `<div class="sheet-details">${details}</div>` : ''}` : ''}`
   );
   sheet.classList.remove('hidden');
 }
@@ -413,7 +507,9 @@ function renderIndustryChain() {
               ? ['Verkauf am Limit', 'limited']
               : bottleneck.id === 'rail'
                 ? ['Lore am Limit', 'limited']
-                : ['Alles läuft', 'balanced'];
+                : bottleneck.id === 'refinery'
+                  ? ['Raffinerie wartet', 'limited']
+                  : ['Alles läuft', 'balanced'];
     $('sceneStatus').textContent = status[0];
     $('sceneStatus').className = 'scene-status ' + status[1];
   }
@@ -644,6 +740,18 @@ function askAcademy(id) {
 document.addEventListener('click', event => {
   const manual = event.target.closest('[data-manual]');
   if (manual) return MANUAL_ACTIONS[manual.dataset.manual]?.();
+  // Beta 1.7 M2: Verteilung
+  const alloc = event.target.closest('[data-alloc], [data-alloc-keep], [data-alloc-priority]');
+  if (alloc) {
+    const a = colonyAlloc();
+    if (alloc.dataset.alloc) a[alloc.dataset.alloc] = !a[alloc.dataset.alloc];
+    if (alloc.dataset.allocKeep !== undefined) a.keep = ALLOC_KEEP_OPTIONS.includes(Number(alloc.dataset.allocKeep)) ? Number(alloc.dataset.allocKeep) : 0;
+    if (alloc.dataset.allocPriority) a.priority = alloc.dataset.allocPriority === 'sale' ? 'sale' : 'production';
+    feedback('open');
+    requestSave(200);
+    renderBuildingSheet();
+    return;
+  }
   const reserve = event.target.closest('[data-reserve]');
   if (reserve) {
     if (setRawReserve(Number(reserve.dataset.reserve))) {
@@ -713,9 +821,28 @@ window.NebulaView.colony = () => {
     auto,
     managers,
     pileRatio: colony.stock.pile / Math.max(1, pileCapacity()),
+    // Beta 1.7 M3: the cart line's real carts (transport.js), interpolated between production ticks
+    transit: (() => {
+      const t = colony.transit,
+        lvl = colony.industry.rail || 0;
+      if (!t || !lvl || typeof cartCapacity !== 'function') return null;
+      const cap = cartCapacity(withPlanet(index, () => railRate())),
+        age = Math.min(1.2, Math.max(0, (Date.now() - (flow?.at || Date.now())) / 1000)),
+        run = (left, dur) => Math.min(1, Math.max(0, 1 - Math.max(0, left - age) / dur));
+      return {
+        tier: cartTier(lvl),
+        auto: Boolean(auto.rail),
+        loading: Math.min(1, t.loading / cap),
+        loadWait: auto.rail ? Math.min(1, (t.wait + age) / CART_INTERVAL) : 0,
+        carts: t.carts.map(c => ({ id: c.id, phase: c.phase, fill: c.phase === 'returning' ? 0 : Math.min(1, c.amount / cap), progress: c.phase === 'moving' || c.phase === 'returning' ? run(c.left, CART_TRAVEL) : c.phase === 'unloading' ? run(c.left, CART_UNLOAD) : 1 }))
+      };
+    })(),
     trip: colony.trip ? { progress: Math.min(1, Math.max(0, (Date.now() - colony.trip.departAt) / Math.max(1, colony.trip.arriveAt - colony.trip.departAt))), waiting: Date.now() >= colony.trip.arriveAt } : null,
     hopperRatio: colony.stock.hopper / Math.max(1, hopperCapacity()),
     barsRatio: colony.stock.bars / Math.max(1, barCapacity()),
+    packedRatio: (colony.stock.packed || 0) / Math.max(1, packCapacity(index)),
+    resinRatio: (colony.stock.resin || 0) / Math.max(1, resinCapacity(index)),
+    coreHealed: typeof coreSaleFactor === 'function' && coreSaleFactor(index) > 1,
     refineryUnlocked: industryUnlocked('refinery'),
     thermalUnlocked: industryUnlocked('thermal'),
     frostRatio: (colony.stock.frost || 0) / Math.max(1, frostCapacity()),
@@ -736,10 +863,13 @@ window.NebulaView.colony = () => {
       sporing: Boolean(fresh && flow.sporesExtracted > 0),
       brewing: Boolean(fresh && flow.gelMade > 0),
       mining: Boolean(fresh && flow.extracted > 0),
-      moving: Boolean(fresh && flow.moved > 0),
+      // Beta 1.7 M3: the carts deliver in batches – the line counts as moving while carts are out or loading
+      moving: Boolean((fresh && flow.moved > 0) || (auto.rail && ((colony.transit?.carts?.length || 0) > 0 || (colony.transit?.loading || 0) > 0))),
+      packing: Boolean(fresh && flow.packedNow > 0),
+      pumping: Boolean(fresh && flow.resinExtracted > 0),
       feeding: Boolean(fresh && flow.fed > 0),
       refining: Boolean(fresh && flow.processed > 0),
-      selling: Boolean(fresh && flow.rawSold + flow.barsSold > 0)
+      selling: Boolean(fresh && flow.rawSold + flow.barsSold + (flow.packedSold || 0) > 0)
     }
   };
 };

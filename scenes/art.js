@@ -18,7 +18,11 @@
       size = 64,
       grid = new Float32Array(size * size);
     for (let i = 0; i < grid.length; i++) grid[i] = rnd();
-    const at = (x, y) => grid[(((y % size) + size) % size) * size + (((x % size) + size) % size)];
+    // size is a power of two: "& mask" is the same wrap as the double modulo, also for negative cells (Beta 1.7 QA:
+    // the planet textures spent most of a 700-ms start-up frame here)
+    const mask = size - 1,
+      shift = Math.log2(size),
+      at = (x, y) => grid[((y & mask) << shift) | (x & mask)];
     const smooth = t => t * t * (3 - 2 * t);
     const value = (x, y) => {
       const xi = Math.floor(x),
@@ -46,7 +50,13 @@
     };
   }
 
-  const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const hexCache = new Map();
+  // parsed once per colour (ramp() runs per texture pixel); callers only read the result
+  const hex = h => {
+    let c = hexCache.get(h);
+    if (!c) hexCache.set(h, (c = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]));
+    return c;
+  };
   const mix = (a, b, t) => [0, 1, 2].map(i => Math.round(math.lerp(a[i], b[i], t)));
   function ramp(stops, t) {
     t = math.clamp(t, 0, 1);
@@ -160,22 +170,34 @@
 
   const cache = new Map();
   function cached(key, build) {
-    if (!cache.has(key)) {
-      // Bounded cache: backgrounds are keyed by size, so resizes must not grow memory without limit.
-      if (cache.size >= 24) cache.delete(cache.keys().next().value);
-      cache.set(key, build());
+    if (cache.has(key)) {
+      // least recently used first out (Beta 1.7 QA: it was first-in-first-out, so backgrounds in use were dropped)
+      const value = cache.get(key);
+      cache.delete(key);
+      cache.set(key, value);
+      return value;
     }
+    // Bounded cache: backgrounds are keyed by size, so resizes must not grow memory without limit.
+    if (cache.size >= 24) cache.delete(cache.keys().next().value);
+    cache.set(key, build());
     return cache.get(key);
   }
+  // Planet textures have their own store (one 512×256 strip per world, 3 MB for all six). Beta 1.7 QA: they shared the
+  // background cache above, whose size-keyed entries (every dock or sheet height is a new size) pushed them out, so a
+  // texture (120 ms of noise) was rebuilt in the middle of a screen change — the single slow frames of the soaks.
+  const planetTextures = new Map();
 
   // Equirectangular-like texture strip; drawn scrolled inside a circular clip to fake rotation.
   function planetTexture(id) {
-    return cached('planet:' + id, () => {
+    if (planetTextures.has(id)) return planetTextures.get(id);
+    const texture = (() => {
       const theme = THEMES[id] || THEMES.crystal,
         w = 512,
         h = 256,
         c = canvas(w, h),
-        ctx = c.getContext('2d');
+        // CPU-backed: written once with putImageData; planet icons read it back through toDataURL (a GPU canvas cost
+        // 60 ms per icon there, Beta 1.7 QA). Scenes still draw it as an image source as before.
+        ctx = c.getContext('2d', { willReadFrequently: true });
       if (!ctx) return c;
       const n = noise2D(math.hash(id)),
         n2 = noise2D(math.hash(id + 'detail')),
@@ -216,7 +238,9 @@
         }
       ctx.putImageData(img, 0, 0);
       return c;
-    });
+    })();
+    planetTextures.set(id, texture);
+    return texture;
   }
 
   // Deep-space backdrop with nebula clouds and two star layers (pre-rendered per size + palette).
@@ -919,7 +943,7 @@
     let url = '';
     try {
       const c = canvas(width, height),
-        ctx = c.getContext('2d');
+        ctx = c.getContext('2d', { willReadFrequently: true });
       if (ctx && c.toDataURL) {
         ctx.translate(width * 0.52, height * 0.5);
         ctx.scale(height * 0.62, height * 0.62);
@@ -964,7 +988,7 @@
     let url = '';
     try {
       const c = canvas(size, size),
-        ctx = c.getContext('2d');
+        ctx = c.getContext('2d', { willReadFrequently: true });
       if (ctx && c.toDataURL) {
         const bg = ctx.createRadialGradient(size / 2, size * 0.45, 4, size / 2, size / 2, size * 0.7);
         bg.addColorStop(0, '#3d4386');
@@ -1317,7 +1341,7 @@
     try {
       const c = document.createElement('canvas');
       c.width = c.height = size;
-      const ctx = c.getContext('2d');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
       if (ctx && c.toDataURL) {
         const bg = ctx.createRadialGradient(size / 2, size * 0.4, 4, size / 2, size / 2, size * 0.7);
         bg.addColorStop(0, friendly ? '#6a4a5a' : '#2f5a7a');
@@ -1342,7 +1366,7 @@
     try {
       const c = document.createElement('canvas');
       c.width = c.height = size;
-      const ctx = c.getContext('2d');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
       if (ctx && c.toDataURL) {
         const bg = ctx.createRadialGradient(size / 2, size * 0.4, 4, size / 2, size / 2, size * 0.7);
         bg.addColorStop(0, friendly ? '#2f5a6a' : '#4a2f5a');

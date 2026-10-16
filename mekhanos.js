@@ -86,6 +86,7 @@ function manualWorkshop() {
   if (made <= 0) return 0;
   colony.stock.precisionOre -= made * PRECISION_ORE_PER_PART;
   state.planetOps.storage[index] = depot - made * RAW_PER_PART;
+  ledgerBook('destroyed', index, 'raw', made * RAW_PER_PART);
   colony.stock.precisionParts += made;
   return made;
 }

@@ -179,9 +179,13 @@ const SCENE_ZOOM_KEY = 'nebula-harvest-colony-zoom';
   try {
     saved = localStorage.getItem(SCENE_ZOOM_KEY) === 'overview' ? 'overview' : 'detail';
   } catch {}
-  if (saved === 'overview') setTimeout(() => applySceneZoom('overview'), 0);
+  // Friends-UX QA: wait until the colony scene is mounted (before, a slow start applied the zoom to no scene and saved
+  // 'detail' over the player's choice)
+  const applySaved = (n = 0) => (colonySceneHandle()?.setZoom ? applySceneZoom('overview') : n < 100 && setTimeout(() => applySaved(n + 1), 100));
+  if (saved === 'overview') setTimeout(applySaved, 0);
 })();
 function applySceneZoom(level) {
+  if (!colonySceneHandle()?.setZoom) return 'detail'; // no scene yet: change and store nothing
   const scene = colonySceneHandle(),
     now = scene?.setZoom ? scene.setZoom(level) : 'detail',
     b = $('sceneZoom');

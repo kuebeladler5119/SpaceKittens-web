@@ -9,6 +9,9 @@
 //
 // Also: first visits of screens generated portraits/ship previews (canvas → toDataURL, 9–40 ms) synchronously; they are
 // pre-warmed in idle time after start-up, one asset per idle slot.
+// Beta 1.7 QA: every such image canvas asks for a CPU-backed context ({ willReadFrequently: true }). Chrome kept them on
+// the GPU, and each toDataURL waited for a GPU read-back (6 planet icons: 353 ms; one DNA picture: 132 ms). With it, the
+// first visits of a soak minute spend 25 ms instead of 830 ms in toDataURL (tools/spike-trace.mjs, PERFORMANCE.md).
 
 let renderDeferDepth = 0,
   renderQueued = false;

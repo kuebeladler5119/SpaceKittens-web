@@ -23,19 +23,32 @@ const GOODS = {
   plating: { name: 'Panzerplatten', icon: '▤', kind: 'intermediate', value: 60 },
   coolant: { name: 'Kühlmittel', icon: '❆', kind: 'intermediate', value: 45 },
   repairKit: { name: 'Reparatursatz', icon: '✚', kind: 'product', value: 150 },
-  hullModule: { name: 'Rumpfmodul', icon: '⬣', kind: 'product', value: 380 }
+  hullModule: { name: 'Rumpfmodul', icon: '⬣', kind: 'product', value: 380 },
+  // Beta 1.7 M5: Sternenharz products (Orion)
+  starFuel: { name: 'Sternentreibstoff', icon: '⚗', kind: 'intermediate', value: 30 },
+  lubricant: { name: 'Funkel-Schmiermittel', icon: '❂', kind: 'intermediate', value: 40 },
+  crystalGel: { name: 'Kristallgel', icon: '◇', kind: 'intermediate', value: 70 },
+  polymer: { name: 'Sternenpolymer', icon: '⬢', kind: 'product', value: 320 },
+  // Beta 1.7 M9: the healed core's crystal (Orion, from core stage 2)
+  coreCrystal: { name: 'Kernkristall', icon: '✶', kind: 'product', value: 2000 }
 };
 const GOOD_IDS = Object.keys(GOODS);
 const GOODS_CAP = { raw: 300, intermediate: 60, product: 20 };
 const RAW_RESALE = 0.4; // share of the reference value a market pays for purchasable raw goods
 // Names of the existing materials a recipe can use (the stock lives where it always did).
-const FAB_MATERIAL_NAMES = { raw: ['Rohkristalle', '◆'], bars: ['Kristallbarren', '▰'], frost: ['Frostquarz', '❄'], cells: ['Thermalzellen', '♨'], emberAlloy: ['Glutlegierung', '▣'] };
+const FAB_MATERIAL_NAMES = { raw: ['Rohkristalle', '◆'], bars: ['Kristallbarren', '▰'], frost: ['Frostquarz', '❄'], cells: ['Thermalzellen', '♨'], emberAlloy: ['Glutlegierung', '▣'], resin: ['Sternenharz', '✺'] };
 // Recipes: inputs are taken at batch start, `seconds` per batch (before the production manager's speed).
 const RECIPES = {
   plating: { name: 'Panzerplatten', out: { plating: 1 }, in: { raw: 20, scrap: 4 }, seconds: 20, uses: 'Reparatursatz, Rumpfmodul, Notreparatur, Schiffsausbau (Panzerung, Schild)' },
   coolant: { name: 'Kühlmittel', out: { coolant: 1 }, in: { frost: 3, water: 5 }, seconds: 15, uses: 'Reparatursatz, Rumpfmodul, Schiffsausbau (Schild, Kühlung)' },
   repairKit: { name: 'Reparatursatz', out: { repairKit: 1 }, in: { plating: 1, coolant: 1 }, seconds: 30, uses: 'Schiffsreparatur, Handel' },
-  hullModule: { name: 'Rumpfmodul', out: { hullModule: 1 }, in: { plating: 3, coolant: 2, cells: 1 }, seconds: 60, unlock: { recipe: 'plating', made: 5 }, uses: 'Schwere Panzerung in der Werft, Handel (Mekhanos und Viridia zahlen am meisten)' }
+  hullModule: { name: 'Rumpfmodul', out: { hullModule: 1 }, in: { plating: 3, coolant: 2, cells: 1 }, seconds: 60, unlock: { recipe: 'plating', made: 5 }, uses: 'Schwere Panzerung in der Werft, Handel (Mekhanos und Viridia zahlen am meisten)' },
+  // Beta 1.7 M5: Sternenharz chemistry (resin from the Orion drill station)
+  starFuel: { name: 'Sternentreibstoff', out: { starFuel: 1 }, in: { resin: 8 }, seconds: 12, uses: 'Füllt den Schiffstank auf (1 Einheit = 2 Treibstoff), Handel' },
+  lubricant: { name: 'Funkel-Schmiermittel', out: { lubricant: 1 }, in: { resin: 4, scrap: 2 }, seconds: 15, uses: 'Sternenpolymer, Handel' },
+  crystalGel: { name: 'Kristallgel', out: { crystalGel: 1 }, in: { resin: 5, raw: 25 }, seconds: 20, uses: 'Sternenpolymer, Handel' },
+  polymer: { name: 'Sternenpolymer', out: { polymer: 1 }, in: { crystalGel: 2, lubricant: 1 }, seconds: 40, unlock: { recipe: 'crystalGel', made: 3 }, uses: 'Handel (Mekhanos zahlt am meisten)' },
+  coreCrystal: { name: 'Kernkristall', out: { coreCrystal: 1 }, in: { bars: 100, polymer: 1 }, seconds: 90, unlock: { core: 'crystal', stage: 2 }, uses: 'Den Kristallkern erwecken, Kernforschung, Handel' }
 };
 const RECIPE_IDS = Object.keys(RECIPES);
 const FAB_MODES = ['once', 'count', 'target', 'auto'];
@@ -51,10 +64,10 @@ const TRADERS = {
 };
 // Demand for manufactured goods per world (bounded 0.85–1.5 like the speciality markets).
 const GOODS_DEMAND = {
-  crystal: { plating: 0.9, coolant: 1.1, repairKit: 1.2, hullModule: 1.0 },
+  crystal: { plating: 0.9, coolant: 1.1, repairKit: 1.2, hullModule: 1.0, starFuel: 0.85, lubricant: 0.9, crystalGel: 0.85, polymer: 0.9 },
   ice: { plating: 1.2, coolant: 0.85, repairKit: 1.0, hullModule: 1.1 },
   volcanic: { plating: 1.1, coolant: 1.5, repairKit: 1.3, hullModule: 1.2 },
-  machine: { plating: 1.35, coolant: 1.2, repairKit: 1.0, hullModule: 1.45 },
+  machine: { plating: 1.35, coolant: 1.2, repairKit: 1.0, hullModule: 1.45, lubricant: 1.4, polymer: 1.5 },
   verdant: { plating: 1.0, coolant: 1.0, repairKit: 1.15, hullModule: 1.25 }
 };
 // Selling floods a market: each unit adds 1/depth to its saturation; the price falls to at most half; it recovers with a
@@ -163,16 +176,19 @@ function fabSpeed(planet) {
 }
 function fabLines(planet) {
   const r = state.colonies[planet]?.industry.refinery || 0;
-  return 1 + (r >= 10 ? 1 : 0) + (r >= 25 ? 1 : 0);
+  return 1 + (r >= 10 ? 1 : 0) + (r >= 25 ? 1 : 0) + (typeof techHas === 'function' && techHas('secondLine') ? 1 : 0);
 }
 function recipeUnlocked(id, planet = state.activePlanet) {
   const r = RECIPES[id];
   if (!r || !fabOpen(planet)) return false;
+  // Beta 1.7 M9: a recipe can be the reward of a core stage (on the core's planet)
+  if (r.unlock?.core) return typeof coreStage === 'function' && coreStage(r.unlock.core) >= r.unlock.stage && planet === CORES[r.unlock.core].planet;
   return !r.unlock || (state.fabStats?.made?.[r.unlock.recipe] || 0) >= r.unlock.made;
 }
 function recipeLockText(id, planet = state.activePlanet) {
   const r = RECIPES[id];
   if (!fabOpen(planet)) return 'Braucht ein Produktionsgebäude in dieser Kolonie (z. B. Raffinerie)';
+  if (r.unlock?.core) return 'Freischaltung: ' + CORES[r.unlock.core].name + ' Stufe ' + r.unlock.stage + ' (Orion)';
   if (r.unlock) return 'Freischaltung: ' + r.unlock.made + '× ' + RECIPES[r.unlock.recipe].name + ' herstellen (' + Math.floor(state.fabStats?.made?.[r.unlock.recipe] || 0) + '/' + r.unlock.made + ')';
   return '';
 }
@@ -207,6 +223,57 @@ function fabLog(planet, entry) {
   fab.done.push(entry);
   if (fab.done.length > RECIPE_IDS.length * 2) fab.done.shift();
 }
+// Beta 1.7 M5: a recipe needs its planet materials here – resin recipes only show where resin exists (Orion) or where
+// the colony holds some (e.g. brought by freight)
+function recipeAvailableHere(id, planet = state.activePlanet) {
+  // (only resin: the older recipes keep showing everywhere, as before)
+  return Object.keys(RECIPES[id]?.in || {}).every(input => input !== 'resin' || MATERIALS.resin.planets.includes(PLANETS[planet]?.id) || fabStock(planet, input) > 0);
+}
+// Beta 1.7 M5: Sternentreibstoff fills the ship's tank. Automatically only while the tank is below half (a reserve for
+// scans and expeditions, never past the tank); by hand (TANKEN) up to the full tank. 1 unit = STAR_FUEL_UNITS fuel.
+const STAR_FUEL_UNITS = 2;
+function refuelFromStarFuel(planet = state.activePlanet, full = false) {
+  const goods = state.colonies[planet]?.goods;
+  if (!goods || !(goods.starFuel >= 1) || typeof fuelTankCapacity !== 'function') return 0;
+  const cap = fuelTankCapacity(),
+    room = Math.floor((cap - state.fuel) / STAR_FUEL_UNITS), // never past the full tank
+    share = typeof techRefuelShare === 'function' ? techRefuelShare() : 0.5,
+    want = full ? room : state.fuel < cap * share ? Math.ceil((cap * share - state.fuel) / STAR_FUEL_UNITS) : 0,
+    n = Math.max(0, Math.min(Math.floor(goods.starFuel), want, room));
+  if (n <= 0) return 0;
+  goods.starFuel -= n;
+  state.fuel += n * STAR_FUEL_UNITS;
+  ledgerBook('destroyed', planet, 'starFuel', n);
+  return n;
+}
+// Beta 1.7 M2: raw crystals the colony's production orders need for their next batches (one per free line, in order).
+// The automatic sale and the hopper feed leave this much in the depot (industry.js rawSaleFloor).
+function fabRawDemand(planet = state.activePlanet) {
+  return fabDemand(planet, 'raw');
+}
+// Beta 1.7 M9: the same for any input the automatic sale could take (raw crystals, bars)
+function fabDemand(planet, material) {
+  const colony = state.colonies[planet];
+  if (!colony?.fab?.orders?.length) return 0;
+  let lines = fabLines(planet),
+    need = 0;
+  for (const order of colony.fab.orders) {
+    if (lines <= 0) break;
+    const r = RECIPES[order.recipe];
+    if (!r || order.paused) continue;
+    if (order.loaded) {
+      lines--;
+      // the batch in work already has its inputs; keep the next one ready if the order goes on after it
+      const more = order.mode === 'auto' || order.mode === 'target' || (order.mode === 'count' && order.count - order.made > 1);
+      if (more) need += r.in[material] || 0;
+      continue;
+    }
+    if (!recipeUnlocked(order.recipe, planet) || !orderWants(order, planet)) continue;
+    lines--;
+    need += r.in[material] || 0;
+  }
+  return need;
+}
 // Advances the colony's orders by `seconds` of production time (event-driven: the same result for any tick size).
 function stepFabrication(planet, seconds) {
   const colony = state.colonies[planet];
@@ -228,16 +295,19 @@ function stepFabrication(planet, seconds) {
         order.loaded = true;
         order.progress = 0;
       }
-      const need = r.seconds / speed - order.progress;
+      const need = (typeof techRecipeSeconds === 'function' ? techRecipeSeconds(order.recipe) : r.seconds) / speed - order.progress;
       if (left < need) {
         order.progress += left;
         left = 0;
         break;
       }
       left -= need;
-      order.progress = r.seconds / speed;
+      order.progress = (typeof techRecipeSeconds === 'function' ? techRecipeSeconds(order.recipe) : r.seconds) / speed;
       if (!outputRoom(order.recipe, planet)) break; // blocked: holds the finished batch until there is room
       for (const [good, n] of Object.entries(r.out)) fabSetStock(planet, good, fabStock(planet, good) + n);
+      // the book: the batch's inputs leave the economy, its output enters it (a loaded batch counts as inventory)
+      for (const [input, need] of Object.entries(r.in)) ledgerBook('destroyed', planet, input, need);
+      for (const [good, n] of Object.entries(r.out)) ledgerBook('created', planet, good, n);
       order.loaded = false;
       order.progress = 0;
       order.made++;
@@ -338,6 +408,7 @@ function buyGood(planet, good, qty) {
   state.credits -= q.cost;
   state.traders[planet].stock[good] -= q.qty;
   fabSetStock(planet, good, fabStock(planet, good) + q.qty);
+  ledgerBook('created', planet, good, q.qty);
   state.fabStats.bought[good] = (state.fabStats.bought[good] || 0) + q.qty;
   traderLog(planet, { at: Date.now(), kind: 'buy', good, qty: q.qty, credits: q.cost });
   return q.qty;
@@ -365,8 +436,9 @@ function sellGood(planet, good, qty) {
   const q = goodsSaleQuote(planet, good, qty);
   if (q.qty <= 0) return 0;
   fabSetStock(planet, good, fabStock(planet, good) - q.qty);
+  ledgerBook('destroyed', planet, good, q.qty);
   state.traders[planet].sat[good] = Math.min(50, q.sat);
-  earn(q.credits);
+  earn(q.credits, 'sale:goods');
   state.fabStats.sold[good] = (state.fabStats.sold[good] || 0) + q.qty;
   traderLog(planet, { at: Date.now(), kind: 'sell', good, qty: q.qty, credits: q.credits });
   GameEvents.emit('sale', { credits: q.credits, amount: q.qty, planet, workplace: 'stall', goods: good });

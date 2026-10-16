@@ -9,14 +9,15 @@
     // market and the spaceport (freight dock, the orbital lift as its landmark at the far end). The cart line runs from
     // the mine to the depot, so material visibly flows from extraction into storage.
     crystal: {
-      width: 60,
-      plots: { hut: 3.6, mine: 10.4, rail: 20.2, depot: 25.6, refinery: 33, stall: 40.6, dock: 48.4, elevator: 56 },
+      // Beta 1.7 M5: the Sternenharz drill station stands beyond the orbital lift, next to the spaceport it fuels
+      width: 66,
+      plots: { hut: 3.6, mine: 10.4, rail: 20.2, depot: 25.6, refinery: 33, stall: 40.6, dock: 48.4, elevator: 56, resinDrill: 62.4 },
       // the cart line starts under the headframe (Förderturm) right of the pile: the mine's output visibly leaves on it
       track: { from: 'mine', fromOffset: 4.6, to: 'depot', toOffset: -2.6 },
       headframe: 5.2,
       mochi: { plot: 'mine', offset: 1.5 },
       // terrain: [x, dy] control points in k units (dy > 0 = lower); platforms are flat raised pads under buildings
-      terrain: [[0, 0.1], [4, -0.05], [10, 0.08], [17, 0], [24, 0.08], [30, -0.04], [37, 0.06], [44, -0.08], [52, -0.12], [60, 0.04]],
+      terrain: [[0, 0.1], [4, -0.05], [10, 0.08], [17, 0], [24, 0.08], [30, -0.04], [37, 0.06], [44, -0.08], [52, -0.12], [60, 0.04], [66, 0.1]],
       platforms: [{ from: 45.4, to: 59.2, dy: -0.18, style: 'pad' }],
       paths: [[2, 46]],
       poles: [7, 18.2, 29.6, 37, 44.6],
@@ -29,7 +30,7 @@
         { id: 'logistics', name: 'Logistik', icon: '⇄', from: 17.9, to: 29.4, color: '#8fe3ff' },
         { id: 'industry', name: 'Raffinerie', icon: '⚙', from: 29.4, to: 36.9, color: '#c4a3ff' },
         { id: 'trade', name: 'Markt', icon: '◈', from: 36.9, to: 44.6, color: '#ffd77a' },
-        { id: 'spaceport', name: 'Raumhafen', icon: '🚀', from: 44.6, to: 59.6, color: '#8ff0d4' }
+        { id: 'spaceport', name: 'Raumhafen', icon: '🚀', from: 44.6, to: 65.6, color: '#8ff0d4' }
       ],
       sky: { planet: [0.78, 0.2], aurora: false, snow: false }
     },

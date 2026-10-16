@@ -77,6 +77,7 @@ function manualFoundry() {
   if (made <= 0) return 0;
   colony.stock.ember -= made * EMBER_PER_ALLOY;
   state.planetOps.storage[index] = depot - made * RAW_PER_ALLOY;
+  ledgerBook('destroyed', index, 'raw', made * RAW_PER_ALLOY);
   colony.stock.emberAlloy += made;
   return made;
 }

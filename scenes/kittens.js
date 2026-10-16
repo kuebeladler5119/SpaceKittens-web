@@ -901,7 +901,7 @@
     try {
       const c = document.createElement('canvas');
       c.width = c.height = size;
-      const ctx = c.getContext('2d');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
       if (ctx && c.toDataURL) {
         const bg = ctx.createRadialGradient(size / 2, size * 0.4, 4, size / 2, size / 2, size * 0.7);
         bg.addColorStop(0, '#3b3f7a');
@@ -932,7 +932,7 @@
     try {
       const c = document.createElement('canvas');
       c.width = c.height = size;
-      const ctx = c.getContext('2d');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
       if (ctx && c.toDataURL) {
         const bg = ctx.createRadialGradient(size / 2, size * 0.4, 4, size / 2, size / 2, size * 0.7);
         bg.addColorStop(0, rank >= 5 ? '#6a4a8a' : '#3b3f7a');
@@ -960,7 +960,7 @@
     try {
       const c = document.createElement('canvas');
       c.width = c.height = size;
-      const ctx = c.getContext('2d');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
       if (ctx && c.toDataURL) {
         const bg = ctx.createRadialGradient(size / 2, size * 0.4, 4, size / 2, size / 2, size * 0.7);
         bg.addColorStop(0, '#2f6f7a');

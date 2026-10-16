@@ -9,7 +9,7 @@ function planetIconURL(index, size = 64) {
   try {
     const c = document.createElement('canvas');
     c.width = c.height = size;
-    const ctx = c.getContext('2d');
+    const ctx = c.getContext('2d', { willReadFrequently: true });
     if (ctx && c.toDataURL) {
       window.NebulaArt.drawPlanet(ctx, PLANETS[index].id, size / 2, size / 2, size * 0.42, 0.4);
       url = c.toDataURL('image/png');

@@ -402,6 +402,19 @@ window.NebulaView.arena = () => {
   };
 };
 
+// Beta 1.7 M10 — dodge: the scene reports drags along the ship's lane; nothing moves while paused, during a story
+// line, or after the result. The first drag ever retires the one-time hint.
+window.addEventListener('arena-steer', event => {
+  const a = arenaRun;
+  if (!a || a.result || (typeof expedition !== 'undefined' && expedition.paused)) return;
+  if (typeof storyDialogueOpen === 'function' && storyDialogueOpen()) return;
+  if (!arenaSteer(a, Number(event.detail?.dy))) return;
+  if (!state.meta.story.journal.includes('dodge-learned')) {
+    state.meta.story.journal.push('dodge-learned');
+    requestSave(500);
+  }
+  document.getElementById('expDodgeHint')?.classList.add('gone');
+});
 // Beta 1.6 — Fokusziel: a tap on an enemy in the arena makes it the ship's target until it falls; a second tap on the
 // same enemy gives the choice back to the ship. The scene only reports where the tap landed (arena-scene.js).
 window.addEventListener('arena-tap', event => {

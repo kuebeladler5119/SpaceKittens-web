@@ -124,7 +124,9 @@ function arenaLoadout() {
     // Beta 1.5 refits: heavy armour makes the ship slower to steer and to fire; cooling fires faster
     rate: shipFireRate() * stats.rate * refitFactor('rate'),
     speed: ARENA.SHIP_SPEED * refitFactor('speed'),
-    shieldSeconds: ARENA_ABILITIES.shield.seconds + refitFactor('shield'),
+    shieldSeconds: ARENA_ABILITIES.shield.seconds + refitFactor('shield') + (typeof techHas === 'function' && techHas('shieldCap') ? 0.5 : 0),
+    // Beta 1.7 M8: the Ausweich-Assistent (research) – a reflex while the player does not steer
+    dodgeAssist: typeof techHas === 'function' && techHas('dodgeAssist'),
     // Beta 1.6 DNA 2.0: Brennlinie (lance) burns 80 % through armour; Würgebohrung (scatter) has no falloff
     armorPierce: stats.signature === 'burnline' ? 0.8 : DNA_CHASSIS[dna?.chassis]?.armorPierce ?? null,
     falloff: stats.signature === 'choke' ? 0 : DNA_CHASSIS[dna?.chassis]?.falloff || 0,
@@ -135,6 +137,35 @@ function arenaLoadout() {
   };
 }
 // A fresh arena for one wave. `hull` = the ship's current hull points (persistent damage already subtracted).
+// Beta 1.7 M10: manual dodging. The player drags anywhere on the fight (relative to where the finger went down, so
+// it never covers the ship); the ship flies to the chosen lane faster than it steers by itself. Shooting stays
+// automatic. Until the first drag the ship steers itself as before (idle players are unchanged); after it the ship
+// holds the player's lane. Deterministic like everything in the arena (the input is applied at the next fixed step).
+const ARENA_DODGE = { speed: 2.2, lane: [8, ARENA.H - 8], near: 7 };
+function arenaSteer(a, dy) {
+  if (!a || a.result || !Number.isFinite(dy)) return false;
+  const [lo, hi] = ARENA_DODGE.lane;
+  a.manualY = Math.max(lo, Math.min(hi, (a.manual ? a.manualY : a.ship.y) + dy));
+  if (!a.manual) a.stats.steered = 1;
+  a.manual = true;
+  return true;
+}
+// the assistant's reflex: the lane away from the first shot that would hit within 0.4 s (null = nothing to dodge)
+function arenaReflex(a) {
+  const ship = a.ship;
+  for (const s of a.foeShots) {
+    if (s.lob || !(s.vx < 0) || s.x < ship.x) continue;
+    const t = (s.x - ship.x) / -s.vx;
+    if (t > 0.4) continue;
+    const y = s.y + s.vy * t;
+    if (Math.abs(y - ship.y) >= s.r + ARENA.SHIP_R + 1) continue;
+    const away = y >= ship.y ? -1 : 1,
+      lane = ship.y + away * 14;
+    a.stats.assisted = (a.stats.assisted || 0) + 1;
+    return lane < 10 || lane > ARENA.H - 10 ? ship.y - away * 14 : lane;
+  }
+  return null;
+}
 function arenaCreate(key, wave, attempt, hull, hullMax, loadout = arenaLoadout()) {
   const seed = (dnaHash(key + ':' + wave) ^ Math.imul(attempt + 1, 2654435761)) >>> 0;
   return {
@@ -159,7 +190,9 @@ function arenaCreate(key, wave, attempt, hull, hullMax, loadout = arenaLoadout()
     shots: [],
     foeShots: [],
     events: [],
-    stats: { kills: 0, crashed: 0, dealt: 0, taken: 0, absorbed: 0, shots: 0, hits: 0, reduced: 0, strong: 0, weak: 0, abilities: 0, calls: 0, parries: 0, overkill: 0, jams: 0, aids: 0 },
+    stats: { kills: 0, crashed: 0, dealt: 0, taken: 0, absorbed: 0, shots: 0, hits: 0, reduced: 0, strong: 0, weak: 0, abilities: 0, calls: 0, parries: 0, overkill: 0, jams: 0, aids: 0, steered: 0, dodged: 0 },
+    manual: false,
+    manualY: ARENA.H / 2,
     result: null
   };
 }
@@ -605,9 +638,12 @@ function arenaStep(a) {
     a.nextSpawn = a.t + (kind === 'moth' && a.queue[a.spawned] === 'moth' ? ARENA_GAP.moth : ARENA_GAP[kind] || ARENA_GAP.default);
   }
   // ship: steers toward its target's height (slowly — a moving ship dodges some aimed shots, not all)
+  // Beta 1.7 M10: after the player's first drag the ship flies to the player's lane (faster), else it steers itself
+  // (Beta 1.7 M8: with the Ausweich-Assistent it sidesteps a shot that would hit within 0.4 s)
   const target = arenaTarget(a),
-    wantY = target ? Math.max(10, Math.min(ARENA.H - 10, target.y)) : ARENA.H / 2,
-    speed = a.loadout.speed || ARENA.SHIP_SPEED,
+    reflex = !a.manual && a.loadout.dodgeAssist ? arenaReflex(a) : null,
+    wantY = a.manual ? a.manualY : reflex !== null ? reflex : target ? Math.max(10, Math.min(ARENA.H - 10, target.y)) : ARENA.H / 2,
+    speed = (a.loadout.speed || ARENA.SHIP_SPEED) * (a.manual ? ARENA_DODGE.speed : reflex !== null ? 1.5 : 1),
     move = Math.max(-speed * dt, Math.min(speed * dt, wantY - ship.y));
   ship.y += move;
   // guns
@@ -756,6 +792,11 @@ function arenaStep(a) {
       s.x += s.vx * dt;
       s.y += s.vy * dt;
       if (Math.hypot(s.x - ship.x, s.y - ship.y) > s.r + ARENA.SHIP_R) {
+        if (a.manual && !s.near && s.x <= ship.x && Math.abs(s.y - ship.y) <= s.r + ARENA.SHIP_R + ARENA_DODGE.near) {
+          s.near = true;
+          a.stats.dodged++;
+          arenaEvent(a, { type: 'dodge', x: ship.x, y: ship.y });
+        }
         if (s.x < -6 || s.x > ARENA.W + 6 || s.y < -6 || s.y > ARENA.H + 6) s.dead = true;
         continue;
       }
@@ -1021,7 +1062,7 @@ function repairShip(kind, planet = state.activePlanet) {
     fabSetStock(planet, good, fabStock(planet, good) - 1);
     restore = Math.min(c.damage, max * (kind === 'kit' ? SHIP_REPAIR.kit : SHIP_REPAIR.plate));
   } else if (kind === 'credits') {
-    const price = Math.ceil(c.damage * SHIP_REPAIR.creditsPerPoint(state.ship.hull || 0));
+    const price = Math.ceil(c.damage * SHIP_REPAIR.creditsPerPoint(state.ship.hull || 0) * (typeof techHas === 'function' && techHas('welder') ? 0.75 : 1));
     if (state.credits < price) return 0;
     state.credits -= price;
     restore = c.damage;
@@ -1031,5 +1072,5 @@ function repairShip(kind, planet = state.activePlanet) {
   return restore;
 }
 function repairCreditPrice() {
-  return Math.ceil(shipCondition().damage * SHIP_REPAIR.creditsPerPoint(state.ship.hull || 0));
+  return Math.ceil(shipCondition().damage * SHIP_REPAIR.creditsPerPoint(state.ship.hull || 0) * (typeof techHas === 'function' && techHas('welder') ? 0.75 : 1));
 }

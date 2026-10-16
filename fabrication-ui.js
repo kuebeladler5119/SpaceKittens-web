@@ -93,7 +93,7 @@ function renderFabModal() {
         return `<div class="fab-chain fab-is-${st.state}"><span class="fab-icon">${FREIGHT_MATERIALS[c.out].icon}</span><div><b>${INDUSTRY_BUILDINGS[c.id].name}</b><small>${st.text} · Lager ${fmt(materialStock(planet, c.out))}</small></div>${fabChip(st.state)}</div>`;
       })
       .join('')}</div>`;
-  html += `<h3 class="fab-heading">Fertigungsaufträge</h3><div class="fab-recipes">${RECIPE_IDS.map(id => recipeCard(id, planet)).join('')}</div>`;
+  html += `<h3 class="fab-heading">Fertigungsaufträge</h3><div class="fab-recipes">${RECIPE_IDS.filter(id => recipeAvailableHere(id, planet)).map(id => recipeCard(id, planet)).join('')}</div>`;
   if (fabOpen(planet)) html += reserveCard(planet);
   setHTML(box, html);
 }

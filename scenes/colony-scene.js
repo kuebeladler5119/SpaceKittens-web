@@ -12,7 +12,7 @@
   const TAU = Math.PI * 2;
   const TAP_SLOP = 9;
   // Sheet keys used by the game for each plot.
-  const PLOT_KEY = { mine: 0, hut: 1, depot: 2, dock: 3, rail: 'rail', refinery: 'refinery', stall: 'stall', frostDrill: 'frostDrill', thermal: 'thermal', foundry: 'foundry', workshop: 'workshop', sporeGarden: 'sporeGarden', biolab: 'biolab' };
+  const PLOT_KEY = { mine: 0, hut: 1, depot: 2, dock: 3, rail: 'rail', refinery: 'refinery', stall: 'stall', frostDrill: 'frostDrill', thermal: 'thermal', foundry: 'foundry', workshop: 'workshop', sporeGarden: 'sporeGarden', biolab: 'biolab', resinDrill: 'resinDrill' };
   const KEY_PLOT = { 0: 'mine', 1: 'hut', 2: 'depot', 3: 'dock' };
   // Where each workplace's manager stands (plot, offset in k) and which way they face.
   const STATIONS = {
@@ -27,7 +27,8 @@
     stall: ['stall', 1.75, -1],
     dock: ['dock', 1.4, -1],
     frostDrill: ['frostDrill', -2.7, 1],
-    thermal: ['thermal', 1.8, -1]
+    thermal: ['thermal', 1.8, -1],
+    resinDrill: ['resinDrill', -2.3, 1]
   };
   const MANAGER_POSE = { mining: 'check', transport: 'signal', storage: 'check', production: 'operate', logistics: 'check', trade: 'stamp' };
   // Helper miners: up to three work at the vein; the rest rest at the huts (never stacked on one spot).
@@ -88,14 +89,18 @@
     const mochiHome = () => (helpers?.[0]?.working && L.mochi.plot === 'mine' ? plotX('mine') + 2.3 * k * mineDir() : plotX(L.mochi.plot) + L.mochi.offset * k);
     // The mine faces its cart line: on worlds where the track runs left, the whole mine site is mirrored.
     const mineDir = () => (L.track.fromOffset >= 0 ? 1 : -1);
+    let sized = false; // Beta 1.7: the first real size starts at Mochi; later resizes keep the view's centre
     function layout() {
       // Phones: kitten size follows the stage height. Wide tablet stages show more of the colony (width-capped).
       // Living Worlds 2.0: phones show about six kitten widths instead of 4.7 — a whole building with its neighbours'
       // edges and the path between them, kittens still large (≈ 60 px on a 390 × 844 phone).
-      k = math.clamp(w >= 560 ? Math.min(h * 0.14, w / 12) : Math.min(h * 0.165, w / 5.6), 32, 66);
+      // Beta 1.7: a tall phone world (the full-screen colony) gets slightly larger kittens and its ground line moves up,
+      // so the extra height becomes foreground (paths, carts, kittens) instead of empty sky
+      const tall = w < 560 && h > w * 1.15;
+      k = math.clamp(w >= 560 ? Math.min(h * 0.14, w / 12) : Math.min(h * 0.165, w / (tall ? 5.2 : 5.6)), 32, tall ? 72 : 66);
       // Beta 1.6: the overview shows about 1.6× as much of the colony (kittens stay ≥ 24 px)
       if (zoom === 'overview') k = Math.max(24, k * ZOOM_OVERVIEW);
-      groundY = h * 0.8;
+      groundY = tall ? h - math.clamp(2.6 * k, h * 0.2, h * 0.34) : h * 0.8;
       worldW = L.width * k;
       if (!mochi.x || mochi.x > worldW) mochi.x = mochiHome();
       cam.x = cam.target = math.clamp(mochi.x - w * 0.42, 0, Math.max(0, worldW - w));
@@ -228,12 +233,16 @@
     function attach(canvas) {
       canvas.style.touchAction = 'pan-y';
       canvas.addEventListener('pointerdown', e => {
-        pointer = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, camX: cam.target, dragging: false };
+        // Beta 1.7: in the full-screen phone world the page cannot scroll (touch-action: none), so any drag pans – a
+        // sloppy diagonal thumb too; in the page layout only a mostly horizontal drag does (the page owns vertical)
+        pointer = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, camX: cam.target, dragging: false, free: getComputedStyle(canvas).touchAction === 'none' };
       });
       canvas.addEventListener('pointermove', e => {
         if (!pointer || e.pointerId !== pointer.id) return;
         const dx = e.clientX - pointer.x0;
-        if (!pointer.dragging && Math.abs(dx) > TAP_SLOP && Math.abs(dx) > Math.abs(e.clientY - pointer.y0)) {
+        // a finger that wandered (any direction) is no tap any more
+        if (Math.hypot(dx, e.clientY - pointer.y0) > TAP_SLOP * 1.5) pointer.moved = true;
+        if (!pointer.dragging && Math.abs(dx) > TAP_SLOP && (pointer.free ? Math.hypot(dx, e.clientY - pointer.y0) > TAP_SLOP * 1.5 : Math.abs(dx) > Math.abs(e.clientY - pointer.y0))) {
           pointer.dragging = true;
           stats.drags++;
           canvas.setPointerCapture?.(e.pointerId);
@@ -246,13 +255,14 @@
       });
       const end = e => {
         if (!pointer || e.pointerId !== pointer.id) return;
-        const wasDrag = pointer.dragging;
+        const wasDrag = pointer.dragging,
+          moved = pointer.moved;
         pointer = null;
         if (wasDrag) {
           cam.target = math.clamp(cam.x + cam.vel * 6, 0, Math.max(0, worldW - w));
           return;
         }
-        if (e.type === 'pointercancel') return;
+        if (e.type === 'pointercancel' || moved) return;
         stats.taps++;
         handleTap(toWorld(e.clientX, e.clientY, canvas));
       };
@@ -466,7 +476,8 @@
     function drawBackground(ctx, width, height, theme) {
       const bg = Art.spaceBackground('col-' + planetId, Math.ceil(width) + 60, Math.ceil(height), theme.sky, math.hash('sky' + planetId));
       ctx.drawImage(bg, -(cam.x * 0.05) % 60, 0);
-      if (L.sky.aurora) CA.aurora(ctx, width, height, time);
+      // Beta 1.7 M9: a healed planetary core lights its world's sky
+      if (L.sky.aurora || view.coreHealed) CA.aurora(ctx, width, height, time);
       const [px, py] = L.sky.planet;
       Art.drawPlanet(ctx, planetId, width * px - cam.x * 0.03, height * py, Math.min(width, height) * 0.08, time * 0.003);
       // Parallax ridges + distant settlement silhouettes (cached per planet and size)
@@ -809,7 +820,8 @@
       };
       if (L.cavern) CA.cavern(ctx, plotX(L.cavern.plot), groundAt(plotX(L.cavern.plot)), k, time, L.sky.snow);
       plot('dock', b[3], 'Frachtdock', CA.dock, { active: auto.dock && flow.selling, queue: v.transportBottleneck });
-      plot('hut', b[1], 'Helferhütte', CA.hut, { cold: L.sky.snow, warm: v.heated !== false });
+      // Beta 1.7 M5: from Lv 10 the helpers' hut is the mining and logistics HQ (Bergbau-Zentrale)
+      plot('hut', b[1], b[1] >= 10 ? 'Bergbau-Zentrale' : 'Helferhütte', CA.hut, { cold: L.sky.snow, warm: v.heated !== false });
       // planet-specific storage/market art (Glacies: Eislager + Frostmarkt; Pyra: Basaltlager + Glutmarkt)
       const VA = planetId === 'verdant' && window.ViridiaArt,
         vv = view.viridia || {},
@@ -852,6 +864,12 @@
         }
       }
       plot('depot', b[2], ice ? 'Eislager' : volcanic ? 'Basaltlager' : VA ? 'Wurzellager' : 'Lagerhaus', ice ? CA.iceDepot : volcanic ? PA.depot : VA ? VA.depot : CA.depot, { fill: v.storageRatio, active: flow.moving, warm: v.heated !== false, calm });
+      // Beta 1.7 M2: the Packstation beside the depot (on the side with more free ground)
+      if ((ind.sorter || 0) > 0 && hasPlot('depot')) {
+        const px = packStationX(),
+          pr = CA.packStation(ctx, px, groundAt(px), k, { level: ind.sorter, fill: v.packedRatio, active: Boolean(flow.packing), time, reduced });
+        addHit(pr, 'building', 'sorter');
+      }
       plot('refinery', ind.refinery, 'Raffinerie', CA.refinery, { active: flow.refining, hopper: v.hopperRatio, bars: v.barsRatio, locked: !v.refineryUnlocked });
       // Beta 1.4 M7: the Fertigung bench right of the refinery (or the Thermalwerkstatt): real orders and goods
       if (view.fab) {
@@ -870,6 +888,8 @@
       if (hasPlot('workshop') && MK) plot('workshop', ind.workshop || 0, 'Präzisionswerkstatt', MK.workshop, { active: flow.assembling, fill: v.precisionRatio, parts: v.partsRatio });
       // maintenance robots: they roll around while the colony's machines really run
       if (MK) for (const lm of L.landmarks || []) if (lm.kind === 'bot') MK.maintenanceBot(ctx, lm.x * k, groundAt(lm.x * k) + 0.05 * k, k * 0.9, time, Boolean(flow.assembling || flow.moving || flow.selling), lm.x);
+      // Beta 1.7 M5: the Sternenharz drill station (Orion): a pumpjack and a resin tank filled to the real level
+      if (hasPlot('resinDrill')) plot('resinDrill', ind.resinDrill || 0, 'Sternenharz-Bohrturm', CA.resinDrill, { active: flow.pumping, fill: v.resinRatio, reduced });
       if (hasPlot('frostDrill')) plot('frostDrill', ind.frostDrill || 0, 'Frostquarz-Bohrer', CA.frostDrill, { active: flow.frost, frozen: v.heated === false, fill: v.frostRatio });
       if (hasPlot('elevator')) CA.elevator(ctx, plotX('elevator'), groundAt(plotX('elevator')), k, { ...common, stage: v.stage });
       drawFreeStations(ctx, b, ind, auto);
@@ -888,6 +908,17 @@
       addHit(mr, 'building', 0);
       addHit({ x0: mx - 1.3 * k, y0: my - 1.6 * k, x1: mx + 1.3 * k, y1: my + 0.1 * k }, 'deposit', 0);
     }
+    // Beta 1.7 M2: where the Packstation stands: 2.4 kitten widths beside the depot, towards the side whose nearest
+    // building (or the Fertigung bench) is farther away
+    function packStationX() {
+      const d = plotX('depot'),
+        others = Object.keys(L.plots)
+          .filter(p => p !== 'depot' && hasPlot(p))
+          .map(plotX);
+      if (view.fab && hasPlot('refinery')) others.push(plotX('refinery') + 2.05 * k);
+      const room = dir => Math.min(...others.filter(x => (x - d) * dir > 0).map(x => Math.abs(x - d)), Infinity);
+      return d + (room(1) >= room(-1) ? 1 : -1) * 2.4 * k;
+    }
     function drawTransport(ctx, theme) {
       const level = view.industry?.rail || 0;
       if (!level) return;
@@ -899,13 +930,52 @@
           r = CA.loadingStation(ctx, sx, groundAt(sx), k, { level, time, active: view.auto?.rail && view.flow?.moving });
         addHit(r, 'building', 'rail');
       }
+      const line = view.transit,
+        useLine = line && (line.auto || line.carts.length > 0 || line.loading > 0);
       carts.forEach((c, i) => {
+        // Beta 1.7 M3: with the cart line running, the legacy shuttle only shows a manual trip
+        if (useLine && !(i === 0 && view.trip && !line.auto)) return;
         const cx = math.lerp(x0, x1, c.pos),
           cy = groundAt(cx) - 0.14 * k,
           heading = (x1 > x0 ? 1 : -1) * c.dir;
         CA.vehicle(ctx, cx, cy, k, { level, loaded: c.loaded && c.dir > 0, dir: heading, time, accent: theme.accent });
         if (i === 0) addHit({ x0: cx - 0.9 * k, y0: cy - 1.1 * k, x1: cx + 0.9 * k, y1: cy + 0.2 * k }, 'cart', 'rail');
       });
+      if (useLine) drawCartLine(ctx, theme, line, x0, x1, level);
+    }
+    // Beta 1.7 M3: the carts of the line exactly as the economy moves them – the loading cart at the Halde (its load
+    // grows), loaded carts on the way, tipping at the depot or waiting there while it is full, empty ones going back.
+    // At the first tier a kitten pushes each wheelbarrow (walks with it, tips it, walks back).
+    function drawCartLine(ctx, theme, line, x0, x1, level) {
+      const toDepot = x1 > x0 ? 1 : -1,
+        barrow = line.tier === 1,
+        spot = (x, heading, o) => {
+          const cy = groundAt(x) - 0.14 * k;
+          if (barrow) {
+            // the pusher walks behind the handles (pose: walking, tipping or waiting)
+            const kx = x - heading * 0.95 * k;
+            kitten(ctx, Kit.WORKERS[(o.seed || 0) % Kit.WORKERS.length], kx, groundAt(kx) + 0.04 * k, k * 0.62, { pose: o.pose, t: time, seed: o.seed || 0, facing: heading, walking: o.pose === 'walk' });
+          }
+          CA.vehicle(ctx, x, cy, k, { level, loaded: o.fill > 0, fill: o.fill, tilt: o.tilt || 0, dir: heading, time, accent: theme.accent, barrow });
+          return { x0: x - 0.9 * k, y0: cy - 1.1 * k, x1: x + 0.9 * k, y1: cy + 0.2 * k };
+        };
+      let queue = 0;
+      // returning (empty) first, so loaded carts are drawn in front of them
+      line.carts
+        .filter(c => c.phase === 'returning')
+        .forEach(c => spot(math.lerp(x1, x0, c.progress), -toDepot, { fill: 0, pose: 'walk', seed: c.id }));
+      line.carts
+        .filter(c => c.phase !== 'returning')
+        .forEach(c => {
+          if (c.phase === 'moving') spot(math.lerp(x0, x1, c.progress), toDepot, { fill: c.fill, pose: 'walk', seed: c.id });
+          else if (c.phase === 'unloading') spot(x1 - toDepot * 0.3 * k, toDepot, { fill: c.fill * (1 - c.progress), tilt: Math.sin(Math.min(1, c.progress) * Math.PI) * 0.6, pose: 'work', seed: c.id });
+          else spot(x1 - toDepot * (0.3 + 1.6 * queue++) * k, toDepot, { fill: c.fill, pose: 'idle', seed: c.id });
+        });
+      // the loading cart at the Halde: its load grows while the interval runs
+      if (line.auto || line.loading > 0) {
+        const r = spot(x0 + toDepot * 0.4 * k, toDepot, { fill: line.loading, pose: line.loading > 0 && line.auto ? 'carry' : 'idle', seed: 0 });
+        addHit(r, 'cart', 'rail');
+      }
     }
     function drawShip(ctx, s) {
       const padX = plotX('dock'),
@@ -1465,9 +1535,19 @@
       },
       resize(width, height) {
         if (Math.abs(width - w) < 1 && Math.abs(height - h) < 1) return;
+        // Beta 1.7: a resize (the phone shell's dock folding, a rotation, the browser bar) keeps the part of the world the
+        // player is looking at; only the very first layout starts at Mochi
+        const had = sized,
+          centre = (cam.x + w / 2) / Math.max(1e-6, k),
+          mochiAt = mochi.x / Math.max(1e-6, k);
         w = width;
         h = height;
+        sized = true;
         layout();
+        if (had) {
+          mochi.x = Math.min(worldW, mochiAt * k);
+          cam.x = cam.target = math.clamp(centre * k - w / 2, 0, Math.max(0, worldW - w));
+        }
       },
       update,
       draw,

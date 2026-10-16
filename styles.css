@@ -13049,3 +13049,1561 @@ body.expedition-on #betaNotice,
 body.expedition-on #betaUpdateBar {
   display: none !important;
 }
+
+/* =====================================================================================================
+   Beta 1.7 M1: Mobile World UX 3.0. On phones the colony and the mine are full-screen game views. A compact HUD sits
+   on top, the world in between, the dock and the navigation at the bottom, and the colony's info cards are in a
+   bottom sheet. The page does not scroll on the colony screen. world-shell.js sets the body classes and measures
+   --w-hud / --w-bottom / --w-world. Wider screens keep the page layout (the wrappers are neutral there).
+   ===================================================================================================== */
+.world-hud {
+  display: contents;
+}
+.home-sheet-head,
+.home-sheet-backdrop {
+  display: none;
+}
+.nav-item[hidden] {
+  display: none !important;
+}
+/* --- the HUD: credits + rate | gems, settings, menu / one line of resource chips --- */
+body.world-shell .world-hud {
+  position: fixed;
+  z-index: 7;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(100%, 480px);
+  box-sizing: border-box;
+  padding: max(6px, env(safe-area-inset-top)) 10px 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'credits actions' 'chips chips';
+  gap: 5px 8px;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(17, 22, 58, 0.97), rgba(17, 22, 58, 0.9));
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(196, 179, 255, 0.18);
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 8px 20px rgba(8, 10, 32, 0.35);
+}
+body.world-shell .world-hud .topbar {
+  grid-area: actions;
+  height: auto;
+}
+body.world-shell .world-hud .brand {
+  display: none;
+}
+body.world-shell .world-hud .topbar-actions {
+  gap: 6px;
+}
+body.world-shell .world-hud .gem-balance {
+  min-height: 44px;
+  padding: 4px 8px;
+}
+body.world-shell .world-hud .settings-button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 13px;
+}
+/* the daily reward: an icon button beside the gems (its text stays for screen readers) */
+body.world-shell .world-hud .topbar-actions .daily-button {
+  flex: none;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  border-radius: 13px;
+}
+body.world-shell .world-hud .topbar-actions .daily-button b,
+body.world-shell .world-hud .topbar-actions .daily-button small {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+body.world-shell .world-hud .resource-panel {
+  grid-area: credits;
+  margin: 0;
+  padding: 4px 10px;
+  min-height: 44px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  box-shadow: none;
+  gap: 8px;
+}
+body.world-shell .world-hud .resource-main {
+  gap: 6px;
+  min-width: 0;
+}
+body.world-shell .world-hud .ore-icon {
+  font-size: 18px;
+}
+body.world-shell .world-hud .resource-panel small {
+  display: none;
+}
+body.world-shell .world-hud .resource-panel strong {
+  font-size: 17px;
+  line-height: 1.1;
+}
+body.world-shell .world-hud .income strong {
+  font-size: 12px;
+}
+body.world-shell .world-hud .mini-resources {
+  grid-area: chips;
+  margin: 0;
+  display: flex;
+  gap: 5px;
+}
+body.world-shell .world-hud .mini-resources > div,
+body.world-shell .world-hud .daily-button {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 26px;
+  padding: 1px 4px;
+  border-radius: 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+body.world-shell .world-hud .mini-resources > div[hidden],
+body.world-shell .world-hud .mini-resources > .hidden {
+  display: none;
+}
+body.world-shell .world-hud .mini-resources small,
+body.world-shell .world-hud .daily-button small {
+  display: none;
+}
+body.world-shell .world-hud .mini-resources b,
+body.world-shell .world-hud .daily-button b {
+  display: inline;
+  font-size: 11.5px;
+}
+body.world-shell .app-shell {
+  padding-top: calc(var(--w-hud, 76px) + 10px);
+}
+/* --- the colony screen: no page scroll, the world fills the free area --- */
+html:has(body.world-home),
+body.world-home {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body.world-home .app-shell {
+  min-height: 0;
+  height: 100%;
+  padding-bottom: 0;
+}
+body.world-home #heroCard.hero-card.has-scene {
+  --scene-h: var(--w-world, 60vh);
+  position: fixed;
+  z-index: 2;
+  top: var(--w-hud, 76px);
+  left: 0;
+  right: 0;
+  height: var(--w-world, 60vh);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+body.world-home #heroCard .scene-canvas {
+  border-radius: 0 !important;
+}
+body.world-home canvas.scene-colony,
+body.world-home canvas.scene-mine {
+  touch-action: none !important;
+}
+/* the planet name and status: a small pill in the sky, no description */
+body.world-home .hero-card.has-scene .hero-copy {
+  left: 10px;
+  right: auto;
+  top: 54px;
+  max-width: 62%;
+  padding: 4px 10px 5px;
+  border-radius: 12px;
+  background: rgba(20, 24, 62, 0.55);
+}
+body.world-home .hero-card.has-scene .hero-copy > span,
+body.world-home .hero-card.has-scene .hero-copy p {
+  display: none;
+}
+body.world-home .hero-card.has-scene .hero-copy h1 {
+  margin: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.world-home .hero-card.has-scene .hero-copy h1 br {
+  display: none;
+}
+body.world-home .hero-card.has-scene .hero-copy .scene-status {
+  margin-top: 3px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+}
+/* the next step: a slim chip at the top of the world */
+body.world-home #objectiveCard {
+  position: fixed;
+  z-index: 4;
+  top: calc(var(--w-hud, 76px) + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100% - 16px), 464px);
+  margin: 0;
+  min-height: 44px;
+  padding: 5px 9px;
+  gap: 8px;
+  background: linear-gradient(110deg, rgba(34, 37, 103, 0.93), rgba(30, 32, 89, 0.93));
+}
+body.world-home #objectiveCard > span {
+  width: 28px;
+  height: 28px;
+  font-size: 15px;
+}
+body.world-home #objectiveCard small {
+  display: none;
+}
+body.world-home #objectiveCard b {
+  margin: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.world-home #objectiveCard p {
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* a sector event: a chip under the next step */
+body.world-home #eventCard:not(.hidden) {
+  position: fixed;
+  z-index: 4;
+  top: calc(var(--w-hud, 76px) + 54px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100% - 16px), 464px);
+  margin: 0;
+  max-height: 30%;
+  overflow: auto;
+}
+/* the scene bar floats at the bottom of the world */
+body.world-home #sceneBar {
+  position: fixed;
+  z-index: 4;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--w-bottom, 120px) + 6px);
+  width: min(calc(100% - 12px), 468px);
+  margin: 0;
+  pointer-events: none;
+}
+body.world-home #sceneBar > * {
+  pointer-events: auto;
+}
+body.world-home #sceneBar .district-nav button,
+body.world-home #sceneBar .scene-tools button {
+  background: rgba(20, 24, 62, 0.78);
+  backdrop-filter: blur(6px);
+}
+body.world-mine #sceneBar,
+body.world-mine #objectiveCard,
+body.world-mine #eventCard {
+  display: none !important;
+}
+.scene-tools .scene-info {
+  border: 1px solid rgba(255, 215, 122, 0.55);
+  color: #ffe9a8;
+}
+/* building sheets: a panel above the dock that scrolls inside itself and never moves the camera */
+body.world-home .building-sheet {
+  position: fixed;
+  z-index: 8;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100% - 16px), 464px);
+  box-sizing: border-box;
+  bottom: calc(var(--w-bottom, 120px) + 8px);
+  max-height: min(64dvh, calc(var(--w-world, 60vh) - 12px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* --- the colony details sheet --- */
+body.world-shell .home-sheet {
+  position: fixed;
+  z-index: 9;
+  left: 50%;
+  bottom: 0;
+  width: min(100%, 480px);
+  box-sizing: border-box;
+  height: min(88dvh, calc(100dvh - var(--w-hud, 76px) - 6px));
+  display: flex;
+  flex-direction: column;
+  transform: translate(-50%, 104%);
+  visibility: hidden;
+  transition:
+    transform 0.26s ease,
+    visibility 0s linear 0.26s;
+  background: linear-gradient(180deg, #1d2150, #141a3a 40%);
+  border: 1px solid rgba(196, 179, 255, 0.3);
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 -16px 40px rgba(8, 10, 32, 0.6);
+}
+body.world-shell.home-sheet-open .home-sheet {
+  transform: translate(-50%, 0);
+  visibility: visible;
+  transition: transform 0.26s ease;
+}
+body.reduce-motion .home-sheet {
+  transition: none !important;
+}
+body.world-shell .home-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  padding: 16px 12px 8px 18px;
+  touch-action: none;
+}
+body.world-shell .home-sheet-grip {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  width: 44px;
+  height: 4px;
+  margin-left: -22px;
+  border-radius: 4px;
+  background: rgba(196, 179, 255, 0.45);
+}
+body.world-shell .home-sheet-head b {
+  font: 900 17px Nunito, sans-serif;
+}
+body.world-shell .home-sheet-head small {
+  flex: 1;
+  color: #b4aedc;
+  font-size: 12px;
+}
+.home-sheet-close {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 22px;
+}
+body.world-shell .home-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 14px calc(18px + env(safe-area-inset-bottom));
+}
+body.world-shell .home-sheet-backdrop {
+  display: block;
+  position: fixed;
+  z-index: 8;
+  inset: 0;
+  background: rgba(8, 10, 32, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+body.world-shell.home-sheet-open .home-sheet-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+body.world-shell:not(.world-home) .home-sheet,
+body.world-shell:not(.world-home) .home-sheet-backdrop {
+  display: none;
+}
+/* --- phones in landscape: the navigation is a rail on the left, the dock a column on the right --- */
+@media (max-height: 520px) and (orientation: landscape) {
+  body.world-shell .world-hud {
+    left: 64px;
+    right: 0;
+    transform: none;
+    width: auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'credits chips actions';
+    border-radius: 0 0 0 16px;
+  }
+  body.world-shell .bottom-nav {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: none;
+    width: 64px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 4px;
+    padding-left: max(4px, env(safe-area-inset-left));
+    border-radius: 0 18px 18px 0;
+    border-top: 0;
+    border-right: 1px solid var(--line);
+  }
+  body.world-shell .app-shell {
+    padding-left: 76px;
+    width: auto;
+    max-width: none;
+  }
+  body.world-home #heroCard.hero-card.has-scene {
+    left: 64px;
+    right: var(--w-right, 0px);
+  }
+  body.world-home .action-dock,
+  body.world-home.mine-active .mine-dock {
+    left: auto !important;
+    right: 0 !important;
+    top: var(--w-hud, 48px);
+    bottom: 0 !important;
+    transform: none !important;
+    width: 210px !important;
+    overflow-y: auto;
+    border-radius: 18px 0 0 0;
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+  body.world-home .action-dock .production-chain,
+  body.world-home .mine-dock .production-chain {
+    display: grid !important;
+    grid-template-columns: 1fr;
+  }
+  body.world-home .dock-summary {
+    flex-wrap: wrap;
+  }
+  body.world-home #objectiveCard,
+  body.world-home #sceneBar,
+  body.world-home .building-sheet {
+    left: calc(64px + (100% - 64px - var(--w-right, 0px)) / 2);
+    width: min(calc(100% - 64px - var(--w-right, 0px) - 16px), 464px);
+  }
+  body.world-home #sceneBar {
+    bottom: 6px;
+  }
+  body.world-home .building-sheet {
+    bottom: 8px;
+  }
+  body.world-shell .home-sheet {
+    height: calc(100dvh - var(--w-hud, 48px));
+  }
+}
+/* folded docks (everything runs automatically): the world takes their space; ✋ brings them back */
+body.world-home.world-dock-folded .action-dock,
+body.world-mine.mine-dock-folded .mine-dock {
+  display: none !important;
+}
+body.world-shell .world-hud .settings-button:not(.menu-button) {
+  display: none;
+}
+.scene-tools .scene-hand {
+  border: 1px solid rgba(143, 240, 212, 0.5);
+  color: #bff7e6;
+}
+.mine-dock-toggle[hidden] {
+  display: none !important;
+}
+/* the mine HUD in the shell: one row (back, bottleneck chip, ✋, overview), the jumps as a column on the right */
+body.world-mine .mine-top b#mineTitle {
+  display: none;
+}
+body.world-mine .mine-top {
+  justify-content: space-between;
+}
+body.world-mine .mine-top .mine-dock-toggle {
+  order: 2;
+  margin-left: auto;
+}
+body.world-mine .mine-top #mineOverviewBtn {
+  order: 3;
+}
+body.world-mine .mine-sub {
+  top: 8px;
+  left: 62px;
+  right: 112px;
+}
+body.world-mine .mine-sub .mine-bottleneck {
+  flex: 1;
+  min-width: 0;
+}
+/* the quick jumps: a slim second row on the right (the floors start below it; nothing covers a tappable floor) */
+body.world-mine .mine-nav {
+  position: absolute;
+  top: 50px;
+  right: -104px;
+  gap: 6px;
+}
+body.world-mine .mine-nav button {
+  width: 44px;
+  min-height: 44px;
+  opacity: 0.9;
+}
+/* the planet switch's return chip: under the planet pill, above the scene bar */
+body.world-home .planet-return-chip {
+  bottom: 62px;
+  left: 10px;
+}
+/* short phones (320 × 568, 360 × 640): a slimmer dock, navigation and scene bar */
+@media (max-height: 700px) and (orientation: portrait) {
+  body.world-shell .bottom-nav {
+    padding-top: 4px;
+    padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  }
+  body.world-shell .nav-item span {
+    font-size: 18px;
+    line-height: 18px;
+  }
+  body.world-home .action-dock .dock-summary,
+  body.world-home .mine-dock .dock-summary {
+    min-height: 28px;
+    margin-bottom: 4px;
+  }
+  body.world-home .action-dock .production-chain .chain-step,
+  body.world-home .mine-dock .production-chain .chain-step {
+    min-height: 50px;
+    padding: 4px 6px;
+  }
+}
+/* building sheet level 2: stocks and distribution on demand */
+.sheet-more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  min-height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(196, 179, 255, 0.3);
+  color: #d8d2ff;
+  font: 800 12px Nunito, sans-serif;
+}
+.sheet-details {
+  margin-top: 6px;
+}
+/* story bubbles sit in the sky under the next-step chip in the shell (they never cover the dock or the scene tools) */
+body.world-home .story-bubble {
+  top: calc(var(--w-hud, 76px) + 56px);
+  bottom: auto;
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  body.world-shell .story-bubble {
+    left: calc(64px + (100% - 64px - var(--w-right, 0px)) / 2);
+    top: calc(var(--w-hud, 48px) + 56px);
+    bottom: auto;
+    width: min(440px, calc(100vw - 64px - var(--w-right, 0px) - 24px));
+  }
+}
+/* Beta 1.7 M2: Verteilung in the depot, refinery, stall and dock sheets (level 2) */
+.sheet-alloc .reserve-options.alloc-keep {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.sheet-alloc .reserve-options.alloc-sell {
+  grid-template-columns: 1fr 1fr;
+}
+.sheet-alloc .reserve-options button {
+  min-height: 44px;
+}
+
+/* Beta 1.7 M4: a station's measured throughput, its use and what holds it back */
+.sheet-station {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(143, 240, 212, 0.25);
+}
+.sheet-station.warn {
+  border-color: rgba(255, 179, 138, 0.6);
+  background: rgba(255, 179, 138, 0.08);
+}
+.sheet-station.full {
+  border-color: rgba(255, 215, 122, 0.55);
+}
+.sheet-station .station-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.sheet-station .station-head em {
+  font-style: normal;
+  font-weight: 900;
+  color: #8ff0d4;
+  white-space: nowrap;
+}
+.sheet-station.warn .station-head em {
+  color: #ffb38a;
+}
+.sheet-station.full .station-head em {
+  color: #ffd77a;
+}
+.sheet-station .station-bar {
+  display: block;
+  height: 6px;
+  margin: 6px 0 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.sheet-station .station-bar u {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #8ff0d4, #ffd77a);
+}
+.sheet-station small {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #d8d2ff;
+}
+.station-fix {
+  margin-top: 6px;
+  min-height: 44px;
+  width: 100%;
+  border-radius: 12px;
+  background: #ffd77a;
+  color: #2a2244;
+  font: 900 12px Nunito, sans-serif;
+}
+/* Beta 1.7 M3: the elevator's last trips (bar = load / capacity) */
+.lift-loads {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(95, 212, 196, 0.08);
+}
+.lift-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 34px;
+  margin-bottom: 4px;
+}
+.lift-bars i {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  background: #5fd4c4;
+}
+.lift-loads small {
+  font-size: 11.5px;
+  color: #d8d2ff;
+}
+
+/* Beta 1.7 M10: the one-time dodge hint over the fight (no touches: it never blocks the drag or a tap) */
+.exp-dodge-hint {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 36%;
+  transform: translateX(-50%);
+  width: min(86%, 360px);
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: rgba(20, 24, 62, 0.86);
+  border: 1px solid rgba(143, 240, 212, 0.55);
+  color: #e8e4fa;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+.exp-dodge-hint span {
+  display: block;
+  font-size: 22px;
+  animation: dodge-sway 1.4s ease-in-out infinite;
+}
+.exp-dodge-hint b {
+  display: block;
+  font: 900 14px Nunito, sans-serif;
+}
+.exp-dodge-hint small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #c9c2f0;
+}
+.exp-dodge-hint.gone {
+  opacity: 0;
+}
+@keyframes dodge-sway {
+  0%,
+  100% {
+    transform: translateX(-10px);
+  }
+  50% {
+    transform: translateX(10px);
+  }
+}
+body.reduce-motion .exp-dodge-hint span {
+  animation: none;
+}
+#expStage canvas.scene-arena {
+  touch-action: none;
+}
+.station-fix:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: #c9c2f0;
+}
+/* Beta 1.7 M8: the research tree (branch chips, a vertical chain of nodes) */
+.tech-box {
+  max-height: min(88dvh, 760px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.tech-note {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: #c9c2f0;
+}
+.tech-branches {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.tech-branches button {
+  flex: none;
+  min-height: 44px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(196, 179, 255, 0.3);
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 6px;
+  align-items: center;
+  text-align: left;
+}
+.tech-branches button span {
+  grid-row: 1 / 3;
+  font-size: 17px;
+}
+.tech-branches button b {
+  font-size: 12px;
+}
+.tech-branches button small {
+  font-size: 10.5px;
+  color: #b4aedc;
+}
+.tech-branches button.active {
+  border-color: #ffd77a;
+  background: rgba(255, 215, 122, 0.14);
+}
+.tech-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.tech-node {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(196, 179, 255, 0.25);
+}
+.tech-node + .tech-node::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: -9px;
+  height: 9px;
+  border-left: 2px dashed rgba(196, 179, 255, 0.45);
+}
+.tech-node.done {
+  border-color: rgba(143, 240, 212, 0.55);
+}
+.tech-node.locked {
+  opacity: 0.7;
+}
+.tech-tier {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #2f338e;
+  font-style: normal;
+  font-weight: 900;
+}
+.tech-node.done .tech-tier {
+  background: #8ff0d4;
+  color: #18204a;
+}
+.tech-node b {
+  font-size: 14px;
+}
+.tech-node p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #d8d2ff;
+}
+.tech-cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+}
+.tech-cost .ok {
+  color: #8ff0d4;
+}
+.tech-cost .short {
+  color: #ffb38a;
+}
+.tech-node button {
+  grid-column: 1 / -1;
+  min-height: 44px;
+  border-radius: 12px;
+  background: #ffd77a;
+  color: #2a2244;
+  font: 900 12px Nunito, sans-serif;
+}
+.tech-node button:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: #c9c2f0;
+}
+.tech-open {
+  margin-top: 8px;
+}
+
+/* Beta 1.7 M9: the planetary core's sheet */
+.core-needs {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.core-need {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.core-need small {
+  display: block;
+  font-size: 11.5px;
+  color: #d8d2ff;
+}
+.core-need button {
+  min-height: 44px;
+  min-width: 84px;
+  border-radius: 12px;
+  background: #ffd77a;
+  color: #2a2244;
+  font: 900 12px Nunito, sans-serif;
+}
+.core-need button:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: #c9c2f0;
+}
+.core-stages {
+  margin: 10px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+.core-stages li {
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  opacity: 0.7;
+}
+.core-stages li.done {
+  opacity: 1;
+  border: 1px solid rgba(143, 240, 212, 0.5);
+}
+.core-stages li.now {
+  opacity: 1;
+  border: 1px solid rgba(255, 215, 122, 0.6);
+}
+.core-stages small {
+  display: block;
+  color: #c9c2f0;
+}
+/* the mine's back button is an arrow on phones (the bottleneck chip needs the row) */
+body.world-mine #mineBack span {
+  display: none;
+}
+body.world-mine #mineBack {
+  min-width: 44px;
+}
+
+/* Beta 1.7 M7: Fundstücke */
+.artifact-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.artifact-card {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(196, 179, 255, 0.25);
+}
+.artifact-card.rare {
+  border-color: rgba(143, 227, 255, 0.6);
+}
+.artifact-card.epic {
+  border-color: rgba(255, 158, 203, 0.7);
+}
+.artifact-card.fav {
+  box-shadow: inset 0 0 0 2px rgba(255, 215, 122, 0.6);
+}
+.artifact-icon {
+  font-size: 28px;
+  text-align: center;
+}
+.artifact-card small {
+  display: block;
+  font-size: 11px;
+  color: #b4aedc;
+}
+.artifact-card p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #d8d2ff;
+}
+.artifact-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr;
+  gap: 6px;
+}
+.artifact-actions button {
+  min-height: 44px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(196, 179, 255, 0.3);
+  font: 800 11px Nunito, sans-serif;
+}
+.artifact-actions button[data-artifact-fav] {
+  font-size: 18px;
+  color: #ffd77a;
+}
+.artifact-actions button:disabled {
+  opacity: 0.45;
+}
+.artifact-odds {
+  margin-top: 10px;
+  font-size: 12px;
+}
+.artifact-odds summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 800;
+  cursor: pointer;
+}
+.artifact-odds ul {
+  margin: 4px 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+}
+
+/* =====================================================================================================
+   Friends-UX: one game view on every screen (world-shell.js), the first steps (onboarding.js), help and info.
+   ===================================================================================================== */
+/* --- wide screens (desktop, tablets): rail on the left, one HUD row, the world fills the rest --- */
+body.world-wide .bottom-nav {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  transform: none;
+  width: 88px;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 6px;
+  padding: 14px 8px;
+  border-radius: 0;
+  border-top: 0;
+  border-right: 1px solid var(--line);
+}
+body.world-wide .bottom-nav .nav-item {
+  min-height: 64px;
+  border-radius: 16px;
+}
+body.world-wide .world-hud {
+  left: var(--w-rail, 0px);
+  right: 0;
+  transform: none;
+  width: auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'credits chips actions';
+  padding: 8px 18px;
+  border-radius: 0 0 0 18px;
+}
+body.world-wide .world-hud .mini-resources {
+  justify-content: flex-start;
+  max-width: 640px;
+}
+body.world-wide .world-hud .mini-resources > div {
+  flex: 0 1 auto;
+  min-width: 78px;
+  padding: 2px 10px;
+}
+body.world-wide .app-shell {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding-left: calc(var(--w-rail, 0px) + 24px);
+  padding-right: 24px;
+}
+body.world-wide .screen:not(#home) {
+  max-width: 1120px;
+  margin-left: auto;
+  margin-right: auto;
+}
+body.world-wide.world-home #home.screen.active {
+  display: block;
+}
+body.world-home.world-wide #heroCard.hero-card.has-scene {
+  left: var(--w-rail, 0px);
+  right: 0;
+}
+body.world-wide.world-home .action-dock,
+body.world-wide.world-home.mine-active .mine-dock,
+body.world-wide .combat-dock {
+  left: var(--w-rail, 0px) !important;
+  right: 0;
+  bottom: 0 !important;
+  transform: none !important;
+  width: auto !important;
+  border-radius: 18px 18px 0 0;
+  padding-left: max(18px, calc((100% - 1000px) / 2));
+  padding-right: max(18px, calc((100% - 1000px) / 2));
+}
+body.world-wide.world-home #objectiveCard,
+body.world-wide.world-home #eventCard:not(.hidden),
+body.world-wide.world-home #sceneBar,
+body.world-wide .story-bubble {
+  left: calc(var(--w-rail, 0px) + (100% - var(--w-rail, 0px)) / 2);
+}
+body.world-wide.world-home #sceneBar {
+  width: min(calc(100% - var(--w-rail, 0px) - 24px), 760px);
+}
+/* the building panel: on the right, under the HUD (the world stays visible and movable beside it) */
+body.world-wide.world-home .building-sheet {
+  left: auto;
+  right: 16px;
+  transform: none;
+  top: calc(var(--w-hud, 60px) + 12px);
+  bottom: auto;
+  width: 400px;
+  max-height: calc(100dvh - var(--w-hud, 60px) - var(--w-bottom, 120px) - 24px);
+}
+/* the colony details: a side panel on the right instead of a bottom sheet; no dimming, the world stays usable */
+body.world-wide .home-sheet {
+  left: auto;
+  right: 0;
+  top: var(--w-hud, 60px);
+  bottom: 0;
+  height: auto;
+  width: min(440px, calc(100% - var(--w-rail, 0px) - 40px));
+  transform: translateX(104%);
+  border-radius: 22px 0 0 0;
+  border-bottom: 1px solid rgba(196, 179, 255, 0.3);
+  box-shadow: -16px 0 40px rgba(8, 10, 32, 0.55);
+}
+body.world-wide.home-sheet-open .home-sheet {
+  transform: translateX(0);
+}
+body.world-wide .home-sheet-grip {
+  display: none;
+}
+body.world-wide .home-sheet-backdrop {
+  display: none !important;
+}
+body.world-wide .home-sheet-body .production-list,
+body.world-wide .home-sheet-body .quest-list {
+  grid-template-columns: 1fr;
+}
+/* a single main view (a new player): no navigation bar or rail */
+body.nav-single .bottom-nav {
+  display: none !important;
+}
+body.nav-single {
+  --nav-h: 0px;
+}
+body.nav-single.world-home .action-dock {
+  bottom: 0;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  body.nav-single.world-shell .world-hud {
+    left: 0;
+  }
+  body.nav-single.world-shell .app-shell {
+    padding-left: 12px;
+  }
+  body.nav-single.world-home #heroCard.hero-card.has-scene {
+    left: 0;
+  }
+  body.nav-single.world-home #objectiveCard,
+  body.nav-single.world-home #sceneBar,
+  body.nav-single.world-home .building-sheet {
+    left: calc((100% - var(--w-right, 0px)) / 2);
+    width: min(calc(100% - var(--w-right, 0px) - 16px), 464px);
+  }
+}
+
+/* --- the first steps: one hint at a time, at the real button --- */
+.coach {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+}
+.coach.hidden {
+  display: none;
+}
+.coach-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 18px;
+  border: 3px solid #ffd77a;
+  box-shadow:
+    0 0 0 5px rgba(255, 215, 122, 0.22),
+    0 0 26px rgba(255, 215, 122, 0.65);
+  animation: coach-pulse 1.4s ease-in-out infinite;
+}
+.coach-ring[hidden] {
+  display: none;
+}
+@keyframes coach-pulse {
+  50% {
+    box-shadow:
+      0 0 0 10px rgba(255, 215, 122, 0.08),
+      0 0 34px rgba(255, 215, 122, 0.85);
+  }
+}
+body.reduce-motion .coach-ring {
+  animation: none;
+}
+.coach-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border-radius: 18px;
+  background: #fff6dc;
+  color: #2a2244;
+  box-shadow: 0 10px 28px rgba(8, 10, 32, 0.45);
+  pointer-events: auto;
+}
+.coach-face {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #ffe2b0;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+}
+.coach-face img {
+  width: 100%;
+  height: 100%;
+}
+.coach-copy {
+  flex: 1;
+  min-width: 0;
+}
+.coach-copy small {
+  display: block;
+  font: 800 10.5px Nunito, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a6a2a;
+}
+.coach-copy b {
+  display: block;
+  font: 900 16px Nunito, sans-serif;
+  line-height: 1.2;
+}
+.coach-copy p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.3;
+  color: #4a3d6a;
+}
+.coach-copy p[hidden] {
+  display: none;
+}
+.coach-action {
+  margin-top: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: #ffd77a;
+  color: #2a2244;
+  font: 900 13px Nunito, sans-serif;
+}
+.coach-action.hidden {
+  display: none;
+}
+.coach-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -4px -4px 0 0;
+  border-radius: 10px;
+  background: rgba(42, 34, 68, 0.08);
+  color: #6a5a8a;
+  font-size: 18px;
+}
+.coach-close[hidden] {
+  display: none;
+}
+.coach-arrow {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  background: #fff6dc;
+  transform: rotate(45deg);
+}
+.coach-arrow.down {
+  bottom: -7px;
+}
+.coach-arrow.up {
+  top: -7px;
+}
+.coach-arrow[hidden] {
+  display: none;
+}
+.coach[data-step="celebrate"] .coach-bubble,
+.coach[data-step="celebrate"] .coach-arrow {
+  background: #dffbef;
+}
+/* while the first steps run, everything that is not part of them waits (it is all still there afterwards) */
+body.ob-active .world-hud .mini-resources,
+body.ob-active .world-hud .daily-button,
+body.ob-active .world-hud .gem-balance,
+body.ob-active.world-home #sceneBar .district-nav,
+body.ob-active.world-home #sceneBar .scene-tools > :not(#homeSheetButton),
+body.ob-active.world-home #objectiveCard,
+body.ob-active.world-home #eventCard,
+body.ob-active .action-dock .dock-summary,
+body.ob-active .action-dock .dock-hint,
+body.ob-active #buildingSheet .batch-toggle,
+body.ob-active #buildingSheet .sheet-station,
+body.ob-active #buildingSheet .sheet-more,
+body.ob-active .story-bubble {
+  display: none !important;
+}
+body.ob-active .world-hud {
+  grid-template-areas: 'credits actions';
+  row-gap: 0;
+}
+/* --- help and info --- */
+.help-box {
+  max-height: min(86dvh, 720px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  text-align: left;
+}
+.help-box h3 {
+  margin: 16px 0 6px;
+  font: 900 14px Nunito, sans-serif;
+  color: #ffe9a8;
+}
+.help-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.help-steps li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.help-steps li i {
+  font-style: normal;
+  font-size: 20px;
+  width: 28px;
+  text-align: center;
+}
+.help-steps li span {
+  flex: 1;
+}
+.help-steps li b {
+  display: block;
+  font-size: 13px;
+}
+.help-steps li small {
+  display: block;
+  font-size: 12px;
+  color: #d8d2ff;
+  line-height: 1.35;
+}
+.help-steps li em {
+  font-style: normal;
+  color: #8ff0d4;
+  font-weight: 900;
+}
+.help-places {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.help-places dt {
+  font-weight: 900;
+  white-space: nowrap;
+}
+.help-places dd {
+  margin: 0;
+  color: #d8d2ff;
+}
+.help-note,
+.help-story {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #d8d2ff;
+}
+.help-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(196, 179, 255, 0.35);
+  color: #fff;
+  font: 800 13px Nunito, sans-serif;
+  text-decoration: none;
+}
+.help-toggle.danger {
+  border-color: rgba(255, 140, 160, 0.6);
+  color: #ffc4cf;
+}
+.test-profile-badge {
+  position: fixed;
+  z-index: 16;
+  right: 6px;
+  bottom: calc(6px + env(safe-area-inset-bottom));
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #ff9ec4;
+  color: #2a2244;
+  font: 900 10px Nunito, sans-serif;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+  opacity: 0.85;
+}
+/* the production dock on wide screens: the chain in the middle, big enough to read and tap */
+body.world-wide.world-home .action-dock,
+body.world-wide.world-home.mine-active .mine-dock {
+  grid-template-columns: minmax(200px, 280px) minmax(0, 720px);
+  justify-content: center;
+}
+body.world-wide.ob-active.world-home .action-dock {
+  grid-template-columns: minmax(0, 720px);
+}
+body.world-wide .action-dock .production-chain .chain-step {
+  min-height: 64px;
+}
+/* phones in landscape: the desktop dock grid (min-width 760 px) must not apply to the dock column (it pushed the
+   chain out of the screen, audit A8) */
+@media (max-height: 520px) and (orientation: landscape) {
+  body.world-home:not(.world-mine):not(.world-dock-folded) #actionDock,
+  body.world-mine:not(.mine-dock-folded) #mineDock {
+    display: block !important;
+  }
+  body.world-home .action-dock .dock-summary,
+  body.world-home .mine-dock .dock-summary {
+    margin-bottom: 6px;
+  }
+  body.world-home .action-dock .production-chain .chain-step {
+    min-height: 56px;
+  }
+}
+body.ob-active .hero-copy .scene-status {
+  display: none;
+}
+
+.coach-ring.tappable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+/* Friends-UX: "📋 Details" keeps its label on every phone (the one tool a player needs to find); the scene bar shows
+   the district names and the tools in one scrollable row */
+@media (max-width: 430px) {
+  .scene-tools .scene-info b {
+    display: inline;
+  }
+}
+body.ob-active #buildingSheet .mine-enter {
+  display: none !important;
+}
+/* --- Abenteuer and Galaxie: labelled areas (views-ux.js) --- */
+.view-tabs {
+  position: sticky;
+  z-index: 3;
+  top: calc(var(--w-hud, 0px) + 4px);
+  display: flex;
+  gap: 6px;
+  margin: 2px 0 14px;
+  padding: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-radius: 16px;
+  background: rgba(20, 24, 62, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(196, 179, 255, 0.2);
+}
+.view-tabs::-webkit-scrollbar {
+  display: none;
+}
+.view-tabs[hidden] {
+  display: none;
+}
+.view-tabs button {
+  flex: 1 0 auto;
+  min-height: 44px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d8d2ff;
+  font: 800 13px Nunito, sans-serif;
+  white-space: nowrap;
+}
+.view-tabs button[hidden] {
+  display: none;
+}
+.view-tabs button.active {
+  background: #ffd77a;
+  color: #2a2244;
+}
+.view-tabs button:focus-visible {
+  outline: 3px solid #8ff0d4;
+  outline-offset: 2px;
+}
+#battle[data-view-tab-active='mission'] [data-view-tab]:not([data-view-tab='mission']),
+#battle[data-view-tab-active='fight'] [data-view-tab]:not([data-view-tab='fight']),
+#battle[data-view-tab-active='ship'] [data-view-tab]:not([data-view-tab='ship']),
+#battle[data-view-tab-active='chests'] [data-view-tab]:not([data-view-tab='chests']),
+#trade[data-view-tab-active='planets'] [data-view-tab]:not([data-view-tab='planets']),
+#trade[data-view-tab-active='market'] [data-view-tab]:not([data-view-tab='market']),
+#trade[data-view-tab-active='freight'] [data-view-tab]:not([data-view-tab='freight']),
+#trade[data-view-tab-active='sector'] [data-view-tab]:not([data-view-tab='sector']) {
+  display: none !important;
+}
+/* the FEUER dock belongs to the live fight */
+body.battle-active:not(.adv-tab-fight) .combat-dock {
+  display: none !important;
+}
+/* the areas are single columns of cards on every width (the old two-column page layouts do not apply) */
+#battle.screen.active[data-view-tab-active] {
+  display: block;
+}
+#trade.screen.active[data-view-tab-active] {
+  columns: auto;
+}
+body.world-wide #battle.screen.active[data-view-tab-active='fight'] .enemy-card {
+  position: static;
+}
+body.world-wide #battle[data-view-tab-active] > [data-view-tab],
+body.world-wide #battle[data-view-tab-active] .combat-info > [data-view-tab] {
+  max-width: 820px;
+  margin-left: auto;
+  margin-right: auto;
+}
+@media (min-width: 760px) {
+  #trade[data-view-tab-active='market'] {
+    columns: 2;
+    column-gap: 22px;
+  }
+  #trade[data-view-tab-active='market'] > .page-title,
+  #trade[data-view-tab-active='market'] > .view-tabs {
+    column-span: all;
+  }
+}
+/* phones: the resource chips open on demand (a tap on the Credits); wide screens always show them */
+body.world-shell:not(.world-wide):not(.hud-more) .world-hud .mini-resources {
+  display: none;
+}
+body.world-shell:not(.world-wide):not(.hud-more) .world-hud {
+  row-gap: 0;
+}
+body.world-shell .world-hud .resource-panel[role='button'] {
+  cursor: pointer;
+}
+body.world-shell:not(.world-wide) .world-hud .resource-panel {
+  position: relative;
+  padding-right: 18px;
+}
+body.world-shell:not(.world-wide) .world-hud .resource-panel::after {
+  content: '▾';
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: #b4aedc;
+}
+body.world-shell.hud-more:not(.world-wide) .world-hud .resource-panel::after {
+  content: '▴';
+}
+body.ob-active .world-hud .resource-panel::after {
+  content: none;
+}
+/* phones in portrait: the "1/3 automatisch · ◈/s" line repeats the HUD's rate; it shows once the chain runs by itself
+   (then it carries the bottleneck hint and the fold switch) */
+@media (orientation: portrait) {
+  body.world-shell:not(.world-wide).world-home .action-dock .dock-summary:has(#dockToggle[hidden]) {
+    display: none;
+  }
+}
+/* the help/info buttons keep their own colours inside dialogs (the generic dialog button is mint) */
+.help-box .help-toggle {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(196, 179, 255, 0.35);
+  color: #fff;
+  box-shadow: none;
+}
+.help-box .help-toggle.danger {
+  background: rgba(255, 140, 160, 0.12);
+  border-color: rgba(255, 140, 160, 0.6);
+  color: #ffd0d9;
+}

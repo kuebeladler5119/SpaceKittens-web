@@ -72,7 +72,7 @@ function dnaWeaponArt(w, size = 160) {
   const c = document.createElement('canvas');
   c.width = size * 2;
   c.height = size;
-  const ctx = c.getContext?.('2d');
+  const ctx = c.getContext?.('2d', { willReadFrequently: true });
   if (!ctx || !window.NebulaArt?.dnaMount) return '';
   ctx.translate(size * 0.78, size / 2);
   ctx.scale(size * 3.4, size * 3.4);

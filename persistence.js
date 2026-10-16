@@ -7,10 +7,19 @@
 // Writes never throw into game code; failures are reported via NebulaSave.lastError.
 (function () {
   'use strict';
-  const PRIMARY = 'nebula-harvest-save';
-  const BACKUP = 'nebula-harvest-save-backup';
-  const CORRUPT = 'nebula-harvest-save-corrupt';
-  const HELD = 'nebula-harvest-save-held';
+  // Friends-UX: ?profil=test opens a separate test profile (its own keys; the normal save is never read or written)
+  const PROFILE = (() => {
+    try {
+      return new URLSearchParams(location.search).get('profil') === 'test' ? 'test' : '';
+    } catch {
+      return '';
+    }
+  })();
+  const SUFFIX = PROFILE ? '-profil-' + PROFILE : '';
+  const PRIMARY = 'nebula-harvest-save' + SUFFIX;
+  const BACKUP = 'nebula-harvest-save' + SUFFIX + '-backup';
+  const CORRUPT = 'nebula-harvest-save' + SUFFIX + '-corrupt';
+  const HELD = 'nebula-harvest-save' + SUFFIX + '-held';
 
   function storage() {
     try {
@@ -31,6 +40,15 @@
   }
 
   const api = {
+    profile: PROFILE,
+    // removes the test profile's keys only (never the normal save)
+    clearProfile() {
+      if (!PROFILE) return false;
+      const store = storage();
+      if (!store) return false;
+      for (const key of [PRIMARY, BACKUP, CORRUPT, HELD]) store.removeItem(key);
+      return true;
+    },
     PRIMARY,
     BACKUP,
     CORRUPT,

@@ -1,11 +1,13 @@
 // PWA offline support. Network-first so updates are picked up immediately; cache is the offline fallback.
 // Not registered inside the Android app (Capacitor serves files locally) or on local dev hosts.
-const CACHE = 'space-kittens-fb-4df69f4ff6cc';
+const CACHE = 'space-kittens-fb-f710c44503da';
 const CORE = [
   "./arena-ui.js",
   "./arena.js",
   "./arsenal-ui.js",
   "./arsenal.js",
+  "./artifacts-ui.js",
+  "./artifacts.js",
   "./assets/fonts/OFL-Nunito.txt",
   "./assets/fonts/OFL-SpaceGrotesk.txt",
   "./assets/fonts/nunito-latin-500-normal.woff2",
@@ -33,6 +35,7 @@ const CORE = [
   "./combat-gun.js",
   "./combat-ui.js",
   "./config.js",
+  "./core.js",
   "./credits.html",
   "./deepcore-ui.js",
   "./deepcore.js",
@@ -64,6 +67,8 @@ const CORE = [
   "./menu-ui.js",
   "./mobile-ux.js",
   "./monetization.js",
+  "./onboarding-state.js",
+  "./onboarding.js",
   "./outer-campaigns-ui.js",
   "./outer-campaigns.js",
   "./persistence.js",
@@ -74,6 +79,8 @@ const CORE = [
   "./privacy.html",
   "./pyra-ui.js",
   "./pyra.js",
+  "./research-ui.js",
+  "./research.js",
   "./reveal.js",
   "./scenes/arena-scene.js",
   "./scenes/art.js",
@@ -93,7 +100,10 @@ const CORE = [
   "./scenes/viridia-art.js",
   "./shop-ui.js",
   "./styles.css",
-  "./viridia.js"
+  "./transport.js",
+  "./views-ux.js",
+  "./viridia.js",
+  "./world-shell.js"
 ];
 
 self.addEventListener('install', event => {

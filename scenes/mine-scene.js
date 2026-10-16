@@ -83,6 +83,8 @@
       canvas.addEventListener('pointermove', e => {
         if (!pointer || e.pointerId !== pointer.id) return;
         const dy = e.clientY - pointer.y0;
+        // Beta 1.7: a finger that wandered (any direction) is no tap any more
+        if (Math.hypot(e.clientX - pointer.x0, dy) > TAP_SLOP * 1.5) pointer.moved = true;
         if (!pointer.dragging && Math.abs(dy) > TAP_SLOP && Math.abs(dy) > Math.abs(e.clientX - pointer.x0)) {
           pointer.dragging = true;
           stats.drags++;
@@ -101,13 +103,14 @@
       });
       const end = e => {
         if (!pointer || e.pointerId !== pointer.id) return;
-        const wasDrag = pointer.dragging;
+        const wasDrag = pointer.dragging,
+          moved = pointer.moved;
         pointer = null;
         if (wasDrag) {
           cam.target = math.clamp(cam.y + cam.vel * 6, 0, maxCam());
           return;
         }
-        if (e.type === 'pointercancel') return;
+        if (e.type === 'pointercancel' || moved) return;
         stats.taps++;
         const rect = canvas.getBoundingClientRect(),
           sy = e.clientY - rect.top;
@@ -407,7 +410,7 @@
     function lastShaftIndex() {
       let last = 0;
       floors().forEach((f, i) => {
-        if (f.kind === 'shaft' || f.kind === 'frost' || f.kind === 'conduit') last = i;
+        if (f.kind === 'shaft' || f.kind === 'frost' || f.kind === 'conduit' || f.kind === 'core') last = i;
       });
       return last;
     }
@@ -618,6 +621,42 @@
         return;
       }
       if (f.kind === 'construction') return drawConstruction(ctx, f, i, top, y);
+      // Beta 1.7 M9: the planetary core – a great crystal heart; its cracks close stage by stage, it glows when healed
+      if (f.kind === 'core') {
+        const cx = (L.tunnelX0 + w) / 2 + 0.6 * k,
+          cy = top + L.fh * 0.55,
+          r0 = Math.min(L.fh * 0.36, 1.6 * k),
+          healed = f.phase === 'healed',
+          pulse = reduced ? 0.7 : 0.6 + Math.sin(time * (healed ? 2.2 : 0.9)) * 0.2;
+        window.NebulaArt.glowCircle(ctx, cx, cy, r0 * (healed ? 3 : 1.8), healed ? '#ffd77a' : '#c4a3ff', pulse * (0.35 + 0.2 * f.stage));
+        ctx.fillStyle = healed ? '#fff1c2' : '#b9a6ff';
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - r0 * 1.25);
+        ctx.lineTo(cx + r0 * 0.8, cy - r0 * 0.15);
+        ctx.lineTo(cx + r0 * 0.4, cy + r0 * 1.0);
+        ctx.lineTo(cx - r0 * 0.4, cy + r0 * 1.0);
+        ctx.lineTo(cx - r0 * 0.8, cy - r0 * 0.15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.fillRect(cx - r0 * 0.12, cy - r0 * 0.9, r0 * 0.1, r0 * 0.9);
+        // the cracks of the stages still to heal (3 → 0)
+        ctx.strokeStyle = 'rgba(40,30,80,0.85)';
+        ctx.lineWidth = Math.max(1.2, 0.05 * k);
+        const cracks = [
+          [[-0.5, -0.4], [-0.15, 0.05], [-0.3, 0.55]],
+          [[0.45, -0.3], [0.1, 0.15], [0.25, 0.7]],
+          [[-0.1, -0.95], [0.05, -0.5], [-0.05, -0.1]]
+        ];
+        cracks.slice(f.stage).forEach(c => {
+          ctx.beginPath();
+          c.forEach(([x, y], j) => (j ? ctx.lineTo(cx + x * r0, cy + y * r0) : ctx.moveTo(cx + x * r0, cy + y * r0)));
+          ctx.stroke();
+        });
+        label(ctx, L.tunnelX0 + 0.25 * k, labelTop(f, i), f.title, f.sub, healed ? '#ffd77a' : '#c4b3ff');
+        addHit({ x0: L.tunnelX0, y0: top + L.fh * 0.25, x1: w, y1: y + 0.2 * k }, 'core', 'crystal');
+        return;
+      }
       if (f.kind === 'conduit') {
         const r = MA.conduit(ctx, L.tunnelX0, y, w, k, time, f.state);
         label(ctx, L.tunnelX0 + 0.25 * k, labelTop(f, i), f.title, f.sub, '#ffd77a');

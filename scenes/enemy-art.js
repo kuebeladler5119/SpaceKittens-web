@@ -608,7 +608,7 @@
     if (typeof document === 'undefined') return '';
     const c = document.createElement('canvas');
     c.width = c.height = size;
-    const ctx = c.getContext('2d');
+    const ctx = c.getContext('2d', { willReadFrequently: true });
     if (!ctx || !DRAW[kind]) {
       portraits.set(key, '');
       return '';

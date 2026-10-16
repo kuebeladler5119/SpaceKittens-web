@@ -378,7 +378,7 @@ function miningBase(planet = state.activePlanet) {
 }
 // Potential mining of a shaft in units/s (multipliers of the colony in context, manager training included).
 function shaftMining(id, planet = state.activePlanet) {
-  return shaftBase(id, planet) * shaftMultiplier(id, planet) * workplaceEfficiency(id, planet);
+  return shaftBase(id, planet) * shaftMultiplier(id, planet) * workplaceEfficiency(id, planet) * (typeof techShaftFactor === 'function' ? techShaftFactor() : 1) * (typeof coreShaftFactor === 'function' ? coreShaftFactor(planet) : 1);
 }
 function shaftTransport(id, planet = state.activePlanet) {
   if (!undergroundOpen(planet)) return Infinity;
@@ -839,6 +839,11 @@ function loadAtStop(planet, e, id, out) {
 }
 // Typed unloading: each material goes to its own receiving store (raw → surface pile, Glutstein → the Glutstein
 // store); the cabin waits (blocked) while any part has no room. Nothing changes its material on the way.
+// Beta 1.7 M3: what the last trips really carried (runtime, for the elevator sheet: load per trip and use)
+const liftTrips = [];
+function liftTripLog(planet = state.activePlanet) {
+  return liftTrips[planet] || (liftTrips[planet] = { cur: 0, last: [], at: [], clock: 0 });
+}
 function unloadCabin(planet, e, ctx, out) {
   const colony = state.colonies[planet],
     byMaterial = {};
@@ -865,11 +870,17 @@ function unloadCabin(planet, e, ctx, out) {
     else out.liftedSpecial[m] = (out.liftedSpecial[m] || 0) + put;
   });
   if (moved > 0 && !offlineMode) GameEvents.emit('elevator-arrived', { planet, amount: moved });
+  const log = liftTripLog(planet);
+  log.cur += moved;
   if (!Object.keys(e.cargo).length) e.load = 0;
   if (e.load <= EPS) {
     e.load = 0;
     e.cargo = {};
     e.trips++;
+    log.last.push(log.cur);
+    log.at.push(log.clock);
+    if (log.last.length > 12) (log.last.shift(), log.at.shift());
+    log.cur = 0;
     e.manual = false;
     setPhase(e, 'surface_idle', 0);
   } else setPhase(e, 'blocked_by_surface_capacity', 0);
@@ -984,6 +995,7 @@ function stepUnderground(dt, ctx = undergroundNumbers(), planet = state.activePl
           else if (m.phase === 'mining') {
             m.load = handBatch(f.id, planet);
             out.manual += m.load;
+            ledgerBook('created', planet, shaftMaterial(f.id, planet), m.load);
             setPhase(m, 'collecting', HAND.collect);
             if (!offlineMode) GameEvents.emit('shaft-mined', { planet, shaft: f.id, amount: m.load, manual: true });
           } else if (m.phase === 'collecting') setPhase(m, 'carrying', HAND.carry);
@@ -1033,6 +1045,9 @@ function stepUnderground(dt, ctx = undergroundNumbers(), planet = state.activePl
   };
   let t = 0,
     guard = 0;
+  // Beta 1.7 M3: the trip log's clock (simulated seconds) so trip arrivals carry their real time
+  const tripLog = liftTripLog(planet),
+    clock0 = tripLog.clock;
   settle();
   while (t < dt - EPS && guard++ < 500000) {
     let h = dt - t;
@@ -1066,8 +1081,10 @@ function stepUnderground(dt, ctx = undergroundNumbers(), planet = state.activePl
     }
     if (e.left > 0) e.left = Math.max(0, e.left - h);
     t += h;
+    tripLog.clock = clock0 + t;
     settle();
   }
+  tripLog.clock = clock0 + dt;
   return out;
 }
 // Underground stock of one material (faces, kittens, platforms, the cabin's share) — per-material conservation.
@@ -1147,6 +1164,7 @@ function conduitMissing() {
 function repairConduit() {
   if (conduitState() !== 'found' || conduitMissing().length) return false;
   state.planetOps.storage[0] -= CONDUIT_REPAIR.raw;
+  ledgerBook('destroyed', 0, 'raw', CONDUIT_REPAIR.raw);
   state.ore -= CONDUIT_REPAIR.ore;
   state.crystals -= CONDUIT_REPAIR.crystals;
   state.meta.deepCore.discoveries.push('orion-conduit');

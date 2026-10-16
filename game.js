@@ -537,6 +537,10 @@ function normalizeState(raw, now = Date.now()) {
   state.shipCondition = normalizeShipCondition(source.shipCondition, now); // schema 37: persistent ship damage (arena.js)
   if (!source.meta?.arsenal) state.meta.arsenal.bossRecord = Math.max(0, Math.floor((state.enemyLevel - 1) / 5) * 5);
   state.meta.deepCore = normalizeDeepCoreMeta(source.meta?.deepCore);
+  state.meta.tech = normalizeTech(source.meta?.tech);
+  state.meta.core = normalizeCore(source.meta?.core);
+  state.meta.onboarding = normalizeOnboarding(source.meta?.onboarding, raw && typeof raw === 'object' ? source : null); // Friends-UX: the first steps (onboarding-state.js)
+  state.meta.artifacts = normalizeArtifacts(source.meta?.artifacts); // Beta 1.7 M7: Fundstücke (default-filled) // Beta 1.7 M9: planetary cores (default-filled) // Beta 1.7 M8: the research tree (default-filled, schema unchanged)
   // Interplanetary freight routes (cargo in transit is part of the run; prestige starts without routes).
   state.routes = normalizeRoutes(source.routes, PLANETS.length);
   state.routesCheckedAt = safeNumber(source.routesCheckedAt, now, 0, now);
@@ -881,9 +885,11 @@ function runProduction(seconds, efficiency = 1) {
 }
 // Staged pipeline (industry.js): credits only come from goods that are actually sold.
 function runColonyProduction(seconds, efficiency = 1) {
+  // Beta 1.7 M2: Fertigung orders advance inside runColonyIndustry's chunks (between the production steps)
   const delivered = runColonyIndustry(seconds, efficiency);
-  // Beta 1.4: Fertigung orders and the world's supply trader advance with the same simulated time
-  stepFabrication(state.activePlanet, seconds * efficiency);
+  // Beta 1.7 M5: Sternentreibstoff tops the ship's tank up while it is below half
+  if (typeof refuelFromStarFuel === 'function') refuelFromStarFuel(state.activePlanet);
+  // Beta 1.4: the world's supply trader advances with the same simulated time
   stepTrader(state.activePlanet, seconds);
   return delivered;
 }
@@ -1658,9 +1664,11 @@ window.NebulaView = {
     };
   }
 };
-function earn(amount) {
+// Beta 1.7 M2: an optional source tag books the Credits (sales vs. rewards); untagged callers count as 'other'
+function earn(amount, source = 'other') {
   state.credits += amount;
   state.totalEarned += amount;
+  if (typeof ledgerCredits === 'function') ledgerCredits(source, amount);
 }
 // One manual harvest roll (critical, ore, alloys, planet loot) without placing the material anywhere. The surface
 // tap uses it directly; with the mine open it runs once per manual work cycle of Shaft 1 (deepcore.js).
@@ -4500,10 +4508,9 @@ $('importSave').onclick = () => {
   closeModal('settingsModal');
   toast('Spielstand geladen. Der vorherige Stand liegt in der Sicherung.');
 };
-if (!state.introSeen) {
-  introRender();
-  $('introModal').classList.remove('hidden');
-}
+// Friends-UX: the three-page story dialog no longer opens before the first tap. A new game starts in the world and
+// Mochi's hints point at the real buttons (onboarding.js); the chapter's story is in ☰ → Hilfe.
+if (!state.introSeen) state.introSeen = true;
 setInterval(save, 15000);
 function strategicEventCatalog() {
   const known = PLANETS.map((planet, index) => (state.planetsUnlocked[index] ? index : null)).filter(

@@ -142,6 +142,7 @@ function manualBiolab() {
   if (made <= 0) return 0;
   colony.stock.spores -= made * SPORES_PER_GEL;
   state.planetOps.storage[index] = depot - made * RAW_PER_GEL;
+  ledgerBook('destroyed', index, 'raw', made * RAW_PER_GEL);
   colony.stock.biogel += made;
   return made;
 }

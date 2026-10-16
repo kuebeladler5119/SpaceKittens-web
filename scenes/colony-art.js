@@ -467,7 +467,14 @@
     ctx.save();
     ctx.translate(x, y);
     if (dir < 0) ctx.scale(-1, 1);
-    const load = n => {
+    // Beta 1.7 M3: the drawn load follows the real fill (o.fill 0..1); o.tilt tips the tub while unloading
+    if (o.tilt) {
+      ctx.translate(0.35 * k, -0.1 * k);
+      ctx.rotate(-o.tilt);
+      ctx.translate(-0.35 * k, 0.1 * k);
+    }
+    const load = max => {
+      const n = o.fill === undefined ? max : o.fill > 0.02 ? Math.max(1, Math.round(o.fill * max)) : 0;
       for (let i = 0; i < n; i++) crystal(ctx, -0.28 * k + i * 0.28 * k, -0.42 * k - (i % 2) * 0.06 * k, 0.26 * k, i % 2 ? accent : '#fff4ff', 0);
     };
     const wheels = (xs, r) =>
@@ -481,7 +488,15 @@
         ctx.arc(wx * k, -0.06 * k, r * 0.45 * k, 0, TAU);
         ctx.fill();
       });
-    if (level < 10) {
+    if (level < 5 && o.barrow) {
+      // a kitten's wheelbarrow: one wheel in front, two handles behind (the kitten is drawn by the scene)
+      if (loaded) load(2);
+      poly(ctx, [[-0.42 * k, -0.48 * k], [0.4 * k, -0.48 * k], [0.28 * k, -0.14 * k], [-0.3 * k, -0.14 * k]], C.wood);
+      line(ctx, -0.42 * k, -0.48 * k, 0.4 * k, -0.48 * k, 0.05 * k, C.woodDark);
+      line(ctx, -0.3 * k, -0.2 * k, -0.72 * k, -0.42 * k, 0.05 * k, C.woodDark);
+      line(ctx, -0.12 * k, -0.14 * k, -0.2 * k, 0, 0.05 * k, C.woodDark);
+      wheels([0.3], 0.13);
+    } else if (level < 10) {
       const big = level >= 5 ? 1.2 : 1;
       if (loaded) load(level >= 5 ? 3 : 2);
       poly(ctx, [[-0.45 * big * k, -0.5 * k], [0.45 * big * k, -0.5 * k], [0.36 * big * k, -0.1 * k], [-0.36 * big * k, -0.1 * k]], level >= 5 ? '#9aa6c8' : C.wood);
@@ -524,6 +539,78 @@
       glow(ctx, 0, 0, 0.7 * k, C.mint, 0.35);
     }
     ctx.restore();
+  }
+
+  // ----- Beta 1.7 M5: Sternenharz drill station – a cute pumpjack (nods only while it pumps) and a pink resin tank
+  // whose level is the real tank fill; a bigger tank and a second pump from Lv 10, a glowing pipe from Lv 25.
+  function resinDrill(ctx, x, y, k, o) {
+    const level = o.level || 0,
+      t = o.time || 0,
+      fill = Math.max(0, Math.min(1, o.fill || 0)),
+      nod = o.active && !o.reduced ? Math.sin(t * 2.2) * 0.22 : 0;
+    shadow(ctx, x, y, 3.4 * k, k);
+    // the pumpjack: a frame, the walking beam and its horse head
+    poly(ctx, [[x - 1.5 * k, y], [x - 1.05 * k, y - 1.15 * k], [x - 0.6 * k, y]], '#7f6ad8');
+    ctx.save();
+    ctx.translate(x - 1.05 * k, y - 1.15 * k);
+    ctx.rotate(nod);
+    fillRR(ctx, -0.95 * k, -0.08 * k, 1.75 * k, 0.16 * k, 0.06 * k, '#c4b3ff');
+    fillRR(ctx, -1.15 * k, -0.22 * k, 0.32 * k, 0.5 * k, 0.12 * k, '#ff9ecb');
+    ctx.restore();
+    line(ctx, x - 2.05 * k, y - 1.15 * k + Math.sin(nod) * 0.95 * k, x - 2.05 * k, y, 0.05 * k, '#4a4f78');
+    // the tank: a glass cylinder, filled to the real level with glowing pink resin
+    const tw = (level >= 10 ? 1.3 : 1.05) * k,
+      th = (level >= 10 ? 1.5 : 1.2) * k,
+      tx = x + 0.15 * k;
+    fillRR(ctx, tx, y - th, tw, th, 0.25 * k, 'rgba(232,228,250,0.35)');
+    if (fill > 0) fillRR(ctx, tx + 0.06 * k, y - 0.06 * k - (th - 0.12 * k) * fill, tw - 0.12 * k, (th - 0.12 * k) * fill, 0.18 * k, '#ff8fc6');
+    glow(ctx, tx + tw / 2, y - th * 0.4, 0.7 * k, '#ff9ecb', 0.25 + fill * 0.35);
+    ctx.strokeStyle = '#e8e4fa';
+    ctx.lineWidth = 0.05 * k;
+    ctx.strokeRect(tx, y - th, tw, th);
+    // the pipe from the pump to the tank (glows from Lv 25)
+    line(ctx, x - 0.6 * k, y - 0.15 * k, tx, y - 0.15 * k, 0.09 * k, level >= 25 ? '#ffd77a' : '#4a4f78');
+    if (level >= 10) {
+      poly(ctx, [[x + 1.65 * k, y], [x + 1.95 * k, y - 0.7 * k], [x + 2.25 * k, y]], '#7f6ad8');
+      fillRR(ctx, x + 1.6 * k, y - 0.82 * k, 0.75 * k, 0.12 * k, 0.05 * k, '#c4b3ff');
+    }
+    plaque(ctx, x, y + 0.18 * k, k, level ? 'Harzbohrturm Lv ' + level : 'Harzbohrturm', '#ff9ecb');
+    return { x0: x - 2.2 * k, y0: y - 1.8 * k, x1: x + 2.3 * k, y1: y + 0.5 * k };
+  }
+
+  // ----- Beta 1.7 M2: Packstation – a sorting table with a belt, a crate stack by real fill, a sign; it grows a roof
+  // at Lv 10 and a second belt at Lv 25. o: { level, fill 0..1 (packed / capacity), active, time, reduced }
+  function packStation(ctx, x, y, k, o) {
+    const level = o.level || 0,
+      t = o.time || 0,
+      fill = Math.max(0, Math.min(1, o.fill || 0));
+    shadow(ctx, x, y, 2.2 * k, k);
+    // the table and its belt (moves only while the station really packs)
+    fillRR(ctx, x - 0.85 * k, y - 0.62 * k, 1.1 * k, 0.12 * k, 0.04 * k, '#4a4f78');
+    line(ctx, x - 0.75 * k, y - 0.5 * k, x - 0.75 * k, y, 0.08 * k, '#2f3170');
+    line(ctx, x + 0.15 * k, y - 0.5 * k, x + 0.15 * k, y, 0.08 * k, '#2f3170');
+    ctx.save();
+    ctx.setLineDash([0.12 * k, 0.12 * k]);
+    ctx.lineDashOffset = o.active && !o.reduced ? -t * 0.8 * k : 0;
+    line(ctx, x - 0.8 * k, y - 0.66 * k, x + 0.2 * k, y - 0.66 * k, 0.05 * k, '#ffd77a');
+    ctx.restore();
+    // a crate in the making on the belt while packing
+    if (o.active) crate(ctx, x - 0.75 * k + ((t * 0.35) % 1) * 0.9 * k, y - 0.68 * k, 0.22 * k, '#ffd77a', '#c98a2a');
+    // the stack of packed crates (0–6 by the real fill)
+    const n = Math.round(fill * 6);
+    for (let i = 0; i < n; i++) {
+      const row = i < 3 ? 0 : i < 5 ? 1 : 2,
+        col = [i, i - 3, i - 5][row];
+      crate(ctx, x + 0.5 * k + col * 0.32 * k + row * 0.16 * k, y - row * 0.3 * k, 0.3 * k, i % 2 ? '#ffc08a' : '#ffd77a', '#c98a2a');
+    }
+    if (level >= 10) {
+      // a little awning over the table
+      poly(ctx, [[-1.05 * k + x, y - 1.2 * k], [0.4 * k + x, y - 1.2 * k], [0.55 * k + x, y - 0.95 * k], [-1.2 * k + x, y - 0.95 * k]], '#8fe3ff');
+      line(ctx, x - 1.0 * k, y - 0.95 * k, x - 1.0 * k, y - 0.1 * k, 0.06 * k, '#2f3170');
+    }
+    if (level >= 25) line(ctx, x - 0.8 * k, y - 0.32 * k, x + 0.2 * k, y - 0.32 * k, 0.05 * k, '#ffd77a');
+    plaque(ctx, x, y + 0.18 * k, k, level ? 'Packstation Lv ' + level : 'Packstation', '#ffd77a');
+    return { x0: x - 1.2 * k, y0: y - 1.3 * k, x1: x + 1.3 * k, y1: y + 0.5 * k };
   }
 
   // ----- Storage: crate yard (1) → depot shed (10) → warehouse (25) → automated high-bay (50) -----
@@ -1189,6 +1276,8 @@
     track,
     loadingStation,
     vehicle,
+    packStation,
+    resinDrill,
     depot,
     iceDepot,
     refinery,

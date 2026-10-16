@@ -79,6 +79,7 @@ function materialCapacity(planet, resource) {
     if (resource === 'precisionParts') return Math.max(partsCapacity(), 20);
     if (resource === 'spores') return Math.max(sporeCapacity(), 60);
     if (resource === 'biogel') return Math.max(biogelCapacity(), 20);
+    if (resource === 'resin') return Math.max(resinCapacity(), 40);
     return Math.max(cellCapacity(), 30);
   });
 }

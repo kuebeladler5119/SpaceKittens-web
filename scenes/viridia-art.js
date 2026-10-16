@@ -529,7 +529,7 @@
     try {
       const c = document.createElement('canvas');
       c.width = c.height = size;
-      const ctx = c.getContext('2d');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
       if (ctx && c.toDataURL) {
         const bg = ctx.createRadialGradient(size / 2, size * 0.35, 4, size / 2, size / 2, size * 0.7);
         bg.addColorStop(0, mood === 'friendly' ? '#3a7a6a' : mood === 'bud' ? '#24404a' : '#4a3a5a');

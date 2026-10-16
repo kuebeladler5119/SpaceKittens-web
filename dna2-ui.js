@@ -14,7 +14,7 @@ function dnaWeaponArtURL(w) {
     const c = document.createElement('canvas');
     c.width = 240;
     c.height = 96;
-    const ctx = c.getContext('2d');
+    const ctx = c.getContext('2d', { willReadFrequently: true });
     if (ctx) {
       ctx.scale(2, 2);
       dnaDrawWeapon(ctx, w);

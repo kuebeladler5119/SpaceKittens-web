@@ -27,8 +27,12 @@ function measuredShaft(id, planet = state.activePlanet) {
 // Header height of the HUD over the mine canvas (the scene reserves this band; see scenes/mine-scene.js).
 let mineHeaderPx = 0;
 function measureMineHeader() {
-  const sub = document.querySelector('#mineHud .mine-sub');
-  if (sub && mineView) mineHeaderPx = sub.offsetTop + sub.offsetHeight + 6;
+  // the floors start under the HUD's lowest row (Beta 1.7: on phones the bottleneck chip shares the top row)
+  const hud = $('mineHud');
+  if (!hud || !mineView) return;
+  const top = hud.getBoundingClientRect().top,
+    rows = [...hud.querySelectorAll('.mine-top, .mine-sub, .mine-nav')].map(el => el.getBoundingClientRect()).filter(r => r.height > 0);
+  if (rows.length) mineHeaderPx = Math.max(...rows.map(r => r.bottom - top)) + 6;
 }
 // Entering the mine brings the whole mine card into view (it is sized to the space above the dock and navigation).
 function scrollMineIntoView() {
@@ -175,6 +179,13 @@ function mineFloors(planet = state.activePlanet) {
     if (below < 0) floors.push(conduit);
     else floors.splice(below, 0, conduit);
   }
+  // Beta 1.7 M9: the planetary core below the deepest shaft (Orion's Kristallkern)
+  if (planet === 0 && typeof corePhase === 'function' && corePhase('crystal') !== 'hidden') {
+    const phase = corePhase('crystal'),
+      st = coreStage('crystal'),
+      def = CORES.crystal;
+    floors.push({ kind: 'core', id: 'core', zone: 'geode', phase, stage: st, title: def.name + (phase === 'healed' ? ' · geheilt' : ' · ' + st + '/3 geheilt'), sub: phase === 'healed' ? 'Orion ist verwandelt' : def.stages[st].name + ' ›' });
+  }
   // construction frontier: the next shaft of this planet (or the mine opening itself)
   const next = def.shafts.find(s => s.id !== 'mine' && !shaftBuilt(s.id, planet) && !shaftUnderConstruction(s.id, planet));
   if (!open) floors.push({ kind: 'frontier', id: 'open', zone: def.shafts[0].zone, title: 'Tiefer graben', sub: 'Erst den Förderturm bauen', locked: true });
@@ -183,7 +194,8 @@ function mineFloors(planet = state.activePlanet) {
     floors.push({ kind: 'frontier', id: next.id, depth: next.depth, zone: next.zone, title: 'Baustelle · ' + next.name, sub: blocker || '◈ ' + fmt(shaftCost(next.id, planet)) + ' · Bauzeit ' + dcTime(next.build || 60), locked: Boolean(blocker) });
   }
   const future = def.zones.find(z => z.future);
-  if (open && future) floors.push({ kind: 'future', id: 'future', zone: 'future', name: future.name });
+  // (Beta 1.7 M9: once the planetary core is found it takes the place of the unexplored depth below)
+  if (open && future && !floors.some(f => f.kind === 'core')) floors.push({ kind: 'future', id: 'future', zone: 'future', name: future.name });
   return floors;
 }
 const mineViewCosmetic = () => state.meta?.equipped?.mine || null; // Beta 1.3 mine look
@@ -388,6 +400,16 @@ function trackRow(id, track) {
         : batchButtonHTML('shaft', id, track, `data-dc-track="${id}:${track}"`);
   return `<li class="track-row ${shaftLimit(id) === track || (shaftLimit(id) === 'mining' && track === 'drill') ? 'limit' : ''}"><i>${info.icon}</i><div><b>${name} · Lv ${level}</b><small>${unit ? fmtRate(now) : fmt(now)}${unit} → ${unit ? fmtRate(next) : fmt(next)}${unit} · ${note}</small></div>${button}</li>`;
 }
+// Beta 1.7 M3: what the cabin really carried on its last trips – and what that says about the bottleneck
+function liftLoadRow(capacity) {
+  const last = liftTripLog().last;
+  if (!last.length) return '';
+  const avg = last.reduce((s, v) => s + v, 0) / last.length,
+    fill = capacity > 0 ? avg / capacity : 0,
+    bars = last.map(v => `<i style="height:${Math.max(6, Math.round(Math.min(1, v / Math.max(1, capacity)) * 100))}%"></i>`).join(''),
+    why = fill >= 0.9 ? 'Die Kabine fährt voll – Tragkraft oder Tempo ausbauen bringt sofort mehr.' : fill < 0.5 ? 'Die Kabine fährt halb leer – die Schächte liefern weniger, als sie tragen könnte.' : 'Die Kabine ist gut ausgelastet.';
+  return `<div class="lift-loads"><div class="lift-bars" aria-hidden="true">${bars}</div><small>Letzte ${last.length} Fahrten: Ø ${fmt(avg)} je Fahrt · ${Math.round(fill * 100)} % der Tragkraft. ${why}</small></div>`;
+}
 function renderDeepSheet(sheet, key) {
   const [, kind, id] = key.split(':');
   let html = '';
@@ -440,6 +462,8 @@ function renderDeepSheet(sheet, key) {
       batchToggleHTML() +
       `<ul class="track-list"><li class="track-row"><i>⏩</i><div><b>Aufzug-Geschwindigkeit · Lv ${e.speed}</b><small>${elevatorFloorTime(e.speed).toFixed(2).replace('.', ',')} → ${elevatorFloorTime(e.speed + 1).toFixed(2).replace('.', ',')} s je Etage · ${fmtRate(rate)} → ${fmtRate(elevatorRate(state.activePlanet, e.speed + 1))}/s</small></div>${batchButtonHTML('elevator', null, 'speed', 'data-dc-elev="speed"')}</li>` +
       `<li class="track-row"><i>▣</i><div><b>Aufzug-Tragkraft · Lv ${e.cap}</b><small>${kisten(capNow)} → ${kisten(elevatorCapacity(e.cap + 1, e.tier))} · ${fmtRate(rate)} → ${fmtRate(elevatorRate(state.activePlanet, e.speed, e.cap + 1))}/s</small></div>${batchButtonHTML('elevator', null, 'cap', 'data-dc-elev="cap"')}</li>${liftTierRowHTML(e, rate)}</ul>` +
+      liftLoadRow(capNow) +
+      (typeof stationRow === 'function' ? stationRow('elevator') : '') +
       managerRow('elevator') +
       `<div class="sheet-actions"><button class="sheet-manual" data-dc-lift ${e.phase !== 'surface_idle' || a.elevator ? 'disabled' : ''}>${a.elevator ? 'FÄHRT AUTOMATISCH' : e.phase === 'surface_idle' ? 'AUFZUG SCHICKEN' : 'UNTERWEGS …'}</button></div>`;
   } else if (kind === 'frontier') {
@@ -489,10 +513,48 @@ function renderDeepSheet(sheet, key) {
       (st === 'repaired'
         ? '<p class="sheet-effect">Repariert: Der Schnurrnetz-Lift speist alle Förderaufzüge – +20 % Fahrtempo auf jedem Planeten (dauerhaft, bleibt nach dem Galaxie-Verkauf).</p>'
         : `<p class="sheet-effect">Reparatur: ${CONDUIT_REPAIR.raw} Rohkristalle aus dem Orion-Lager · ${CONDUIT_REPAIR.ore} Erz · ${CONDUIT_REPAIR.crystals} Kristalle. Belohnung: Schnurrnetz-Lift (+20 % Fahrtempo aller Aufzüge, dauerhaft).${missing.length ? ' Es fehlen: ' + missing.join(', ') + '.' : ''}</p><div class="sheet-actions"><button class="sheet-buy ${missing.length ? '' : 'affordable'}" data-dc-repair ${missing.length ? 'disabled' : ''}>REPARIEREN</button></div>`);
-  } else if (kind === 'overview') html = mineOverviewHTML();
+  } else if (kind === 'core') html = coreSheetHTML(id || 'crystal');
+  else if (kind === 'overview') html = mineOverviewHTML();
   setHTML(sheet, html);
   sheet.classList.remove('hidden');
 }
+// Beta 1.7 M9: the core's sheet – the stage, every need with its progress and a DELIVER button, the rewards
+function coreSheetHTML(key) {
+  const def = CORES[key],
+    s = coreState(key),
+    phase = corePhase(key),
+    done = def.stages.map((st, i) => `<li class="${i < s.stage ? 'done' : i === s.stage ? 'now' : ''}"><b>${i + 1}. ${st.name}</b><small>${st.reward}</small></li>`).join('');
+  let body = '';
+  if (phase === 'healed') body = '<p class="sheet-effect">Der Kern ist geheilt. Orion leuchtet – alle Verkäufe auf Orion bringen 25 % mehr.</p>';
+  else {
+    const st = def.stages[s.stage],
+      sources = coreSources(key),
+      rows = Object.entries(st.needs)
+        .map(([item, need]) => {
+          const paid = s.paid[item] || 0,
+            have = item === 'credits' || item === 'crystals' ? coreItemStock(item) : sources.reduce((sum, p) => sum + Math.floor(fabStock(p, item)), 0),
+            [name, icon] = item === 'crystals' ? ['Kristalle', '◆'] : techItemName(item),
+            left = Math.max(0, need - paid);
+          return `<li class="core-need"><div><b>${icon} ${name}</b><small>${fmt(paid)} / ${fmt(need)} · verfügbar ${fmt(have)}</small><i class="station-bar"><u style="width:${Math.round((paid / need) * 100)}%"></u></i></div><button data-core-give="${item}" ${left > 0 && have >= 1 ? '' : 'disabled'}>${left <= 0 ? '✓' : 'LIEFERN'}</button></li>`;
+        })
+        .join('');
+    body = `<p class="sheet-effect">Stufe ${s.stage + 1}: ${st.name} – Belohnung: ${st.reward} Teillieferungen zählen.${typeof techHas === 'function' && techHas('coreProbe') ? ' Die Kernsonde nimmt Material aus allen Kolonien.' : ' Geliefert wird aus der besuchten Kolonie.'}</p><ul class="core-needs">${rows}</ul>`;
+  }
+  return deepSheetHead('◉', def.name + ' · Tiefe 15', 'Der beschädigte Kern des Kristallplaneten. Seit der Großen Stille ist er gesprungen – heile ihn in drei Stufen.') + body + `<ol class="core-stages">${done}</ol>`;
+}
+document.addEventListener('click', event => {
+  const give = event.target.closest('[data-core-give]');
+  if (!give) return;
+  const before = coreStage('crystal'),
+    n = coreDeliver(give.dataset.coreGive, 'crystal');
+  if (n > 0) {
+    feedback('upgrade', 'success');
+    toast(coreStage('crystal') > before ? '◉ Kernstufe ' + coreStage('crystal') + ' geheilt!' : 'Geliefert: ' + fmt(n));
+    requestSave(200);
+  }
+  renderBuildingSheet();
+  render();
+});
 function mineOverviewHTML() {
   const open = undergroundOpen(),
     a = colonyAutomation(),
@@ -546,14 +608,24 @@ window.NebulaColonyActions.mineTap = (type, key) => {
     // 'hire': the empty manager desk — the shaft sheet carries the manager row with its hire button
     mineSelected = key;
     openBuildingSheet('dc:shaft:' + key);
-    // keep the tapped shaft in view above the compact panel
+    // Beta 1.7: the camera stays where the player put it; it only moves when the opened panel would cover the tapped shaft
     const index = NebulaView.mine?.().floors.findIndex(f => f.id === key);
-    if (index >= 0) mineScene()?.focusFloor(index);
+    requestAnimationFrame(() => {
+      const scene = mineScene(),
+        canvas = document.querySelector('canvas.scene-mine'),
+        sheet = $('buildingSheet');
+      if (index < 0 || !scene || !canvas) return;
+      const hit = scene.hitAreas().find(h => h.type === 'shaft' && h.key === key),
+        sheetTop = sheet && !sheet.classList.contains('hidden') ? sheet.getBoundingClientRect().top : Infinity,
+        top = canvas.getBoundingClientRect().top;
+      if (!hit || top + hit.y1 > sheetTop - 4 || top + hit.y0 < top + scene.camera().head) scene.focusFloor(index);
+    });
   } else if (type === 'elevator') openBuildingSheet('dc:elevator');
   else if (type === 'frontier') openBuildingSheet(key === 'open' ? 'dc:open' : key === 'frostDrill' ? 'frostDrill' : 'dc:frontier:' + key);
   else if (type === 'construction') openBuildingSheet('dc:build:' + key);
   else if (type === 'open') openBuildingSheet('dc:open');
   else if (type === 'conduit') openBuildingSheet('dc:conduit');
+  else if (type === 'core') openBuildingSheet('dc:core:crystal');
   else if (type === 'frost') openBuildingSheet('frostDrill');
   else if (type === 'void') voidChat();
   else if (type === 'surface') setMineView(false);

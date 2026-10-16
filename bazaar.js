@@ -104,8 +104,9 @@ function deliverContract(id) {
   const c = b.contracts[index];
   if (!state.planetsUnlocked[c.planet] || contractStock(c.planet, c.resource) < c.amount) return false;
   contractSetStock(c.planet, c.resource, contractStock(c.planet, c.resource) - c.amount);
+  ledgerBook('destroyed', c.planet, c.resource, c.amount);
   const credits = c.credits * bazaarTradeBonus(c.planet);
-  earn(credits);
+  earn(credits, 'contract');
   if (c.bonus) state[c.bonus.kind] += c.bonus.amount;
   b.contracts.splice(index, 1);
   b.refreshAt = Date.now() + BAZAAR_REFRESH_MS;
@@ -132,9 +133,10 @@ function sellSpeciality(resource, units) {
     qty = Math.min(stock, units);
   if (!BAZAAR_SELL_PRICE[resource] || qty <= 0) return 0;
   setMaterialStock(planet, resource, stock - qty);
+  ledgerBook('destroyed', planet, resource, qty);
   // Beta 1.3: the planet's market (demand profile, own goods cheaper — market.js)
   const credits = qty * BAZAAR_SELL_PRICE[resource] * bazaarTradeBonus(planet) * (typeof marketFactor === 'function' ? marketFactor(planet, resource) : 1);
-  earn(credits);
+  earn(credits, 'sale:speciality');
   GameEvents.emit('sale', { credits, amount: qty, planet, workplace: 'stall' });
   return credits;
 }

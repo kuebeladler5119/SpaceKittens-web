@@ -7,7 +7,7 @@ window.NEBULA_CONFIG = Object.freeze({
   "adsProvider": "none",
   "adsTestMode": true,
   "channel": "friends-beta",
-  "commit": "4df69f4ff6cce2cb82a0c1e491851396ee5a04fb",
-  "commitShort": "4df69f4",
-  "buildDate": "2026-10-16T09:42:49.969Z"
+  "commit": "f710c44503dad18463fa161e9504aa532f9888a3",
+  "commitShort": "f710c44",
+  "buildDate": "2026-10-16T19:50:37.618Z"
 });

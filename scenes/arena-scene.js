@@ -896,9 +896,30 @@
       draw,
       attach(canvas) {
         let down = null;
-        canvas.addEventListener('pointerdown', e => (down = { x: e.clientX, y: e.clientY, t: performance.now() }));
+        // Beta 1.7 M10: a drag steers the ship (relative: the finger's way, not its position, so it never covers the
+        // ship); a short touch without movement stays the Fokusziel tap. Portrait shows the arena turned, so the
+        // ship's lane runs along the screen's horizontal axis there.
+        canvas.style.touchAction = 'none';
+        canvas.addEventListener('pointerdown', e => {
+          down = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), drag: false };
+        });
+        canvas.addEventListener('pointermove', e => {
+          if (!down || e.pointerId !== down.id) return;
+          if (!down.drag && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10) {
+            down.drag = true;
+            canvas.setPointerCapture?.(e.pointerId);
+          }
+          if (!down.drag) return;
+          const rect = canvas.getBoundingClientRect(),
+            px = (w / Math.max(1, rect.width)) / Math.max(1e-6, geo.s),
+            d = geo.rot ? (e.clientX - down.lx) * px : (e.clientY - down.ly) * px;
+          down.lx = e.clientX;
+          down.ly = e.clientY;
+          if (d) window.dispatchEvent(new CustomEvent('arena-steer', { detail: { dy: d } }));
+        });
+        canvas.addEventListener('pointercancel', () => (down = null));
         canvas.addEventListener('pointerup', e => {
-          if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 12 || performance.now() - down.t > 600) return (down = null);
+          if (!down || down.drag || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 12 || performance.now() - down.t > 600) return (down = null);
           down = null;
           const rect = canvas.getBoundingClientRect(),
             sim = toSim(((e.clientX - rect.left) / Math.max(1, rect.width)) * w, ((e.clientY - rect.top) / Math.max(1, rect.height)) * h);

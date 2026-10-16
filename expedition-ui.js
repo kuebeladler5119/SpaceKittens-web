@@ -109,6 +109,23 @@ function expBlocked() {
 }
 
 // ----- open / close -----
+function showDodgeHint() {
+  const stage = $('expStage');
+  if (!stage) return;
+  let hint = $('expDodgeHint');
+  if (!hint) {
+    hint = document.createElement('div');
+    hint.id = 'expDodgeHint';
+    hint.className = 'exp-dodge-hint';
+    hint.setAttribute('role', 'note');
+    stage.append(hint);
+  }
+  const portrait = stage.getBoundingClientRect().height > stage.getBoundingClientRect().width;
+  hint.innerHTML = `<span aria-hidden="true">${portrait ? '👈 👆 👉' : '👆'}</span><b>Ausweichen: irgendwo ${portrait ? 'nach links oder rechts' : 'nach oben oder unten'} wischen</b><small>Dein Schiff fliegt mit – es schießt weiter von selbst. Tippen auf einen Gegner wählt ihn als Ziel.</small>`;
+  hint.classList.remove('gone');
+  clearTimeout(showDodgeHint.timer);
+  showDodgeHint.timer = setTimeout(() => hint.classList.add('gone'), 9000);
+}
 function setExpeditionState(next) {
   expedition.state = next;
   const on = next !== 'closed';
@@ -119,6 +136,8 @@ function setExpeditionState(next) {
     root.dataset.state = next;
   }
   if (on) renderExpedition();
+  // Beta 1.7 M10: the one-time dodge hint over the fight (until the first drag ever; it never blocks a touch)
+  if (next === 'fight' && !state.meta.story.journal.includes('dodge-learned')) showDodgeHint();
   // the arena canvas starts/stops with the fight layer
   const m = window.NebulaScenesRuntime?.mounted;
   setTimeout(() => (m?.arena?.handle.refresh?.(), Object.values(m || {}).forEach(x => x.handle.refresh?.())), 0);
