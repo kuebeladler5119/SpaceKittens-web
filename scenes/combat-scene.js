@@ -190,7 +190,9 @@
         const baseWeapon = WEAPONS[event.weapon] || WEAPONS.Laser,
           tint = window.SpaceKittensForge?.LOOKS?.[view.cosmeticImpact];
         // Beta 1.2 Trefferfunken: only the colour of the ship's shots and impacts changes (never their size or number)
-        const weapon = tint ? { ...baseWeapon, color: tint.color, core: tint.core } : event.dnaTint ? { ...baseWeapon, color: event.dnaTint[0], core: '#ffffff' } : baseWeapon;
+        // P1.4: a DNA weapon keeps its affinity colour (the impact look adds its halo, as in the arena); the standard gun
+        // still glows in the look's colour
+        const weapon = event.dnaTint ? { ...baseWeapon, color: event.dnaTint[0], core: '#ffffff', halo: tint?.color || null } : tint ? { ...baseWeapon, color: tint.color, core: tint.core } : baseWeapon;
         const hardpoints = Art.weaponHardpoints(view.ship).length;
         recoil = reduced ? 0 : event.weapon === 'Nova' ? 1 : 0.6;
         if (event.shielded && !event.aimed) setPilotMood('worried', 0.8);
@@ -407,6 +409,10 @@
         enemy.hit = 0.12;
         enemy.knock = Math.min(1, enemy.knock + (strong ? 0.8 : 0.4));
       }
+      if (!reduced && !shot.shielded && shot.def.halo) {
+        ring(hx, hy, 2, 20, 0.35, shot.def.halo, 2);
+        for (let i = 0; i < 4; i++) particles.spawn({ x: hx, y: hy, vx: Math.cos(i * 1.57 + 0.4) * 120, vy: Math.sin(i * 1.57 + 0.4) * 120, drag: 3, life: 0.35, size: 2, color: shot.def.halo });
+      }
       if (!reduced && !shot.shielded) {
         const c = shot.def.color;
         if (shot.weapon === 'Laser') ring(hx, hy, 2, 16, 0.22, c, 2);
@@ -549,8 +555,11 @@
       const def = shot.def,
         from = shot.from;
       ctx.globalCompositeOperation = 'lighter';
-      // Muzzle flash
-      if (shot.age - shot.delay < 0.08) Art.glowCircle(ctx, from.x, from.y, 12, def.color);
+      // Muzzle flash (P1.4: with the equipped muzzle style, as in the arena)
+      if (shot.age - shot.delay < 0.08) {
+        Art.glowCircle(ctx, from.x, from.y, 12, def.color);
+        if (view.cosmeticMuzzle) window.DnaVisuals?.drawMuzzleOrnament(ctx, from.x, from.y, 2.4, view.cosmeticMuzzle, (shot.age - shot.delay) / 0.08);
+      }
       if (!def.speed) {
         // Beam weapons: instant line that fades after impact.
         const fade = shot.hit ? Math.max(0, 1 - (shot.age - shot.delay - shot.travel) / 0.2) : 1;
@@ -603,6 +612,9 @@
           ctx.lineTo(x, y);
           ctx.stroke();
           Art.glowCircle(ctx, x, y, def.size * (shot.overcharge ? 2.4 : 1.7), def.color);
+          // P1.4: the cosmetic layer (impact halo, Geschoss-Spur) – the projectile itself stays as it is
+          if (def.halo) window.CosmeticArt?.shotHalo(ctx, def.halo, x, y, def.size * 0.9);
+          if (view.cosmeticShot) window.CosmeticArt?.shotTrail(ctx, view.cosmeticShot, x, y, target.x - from.x, target.y - from.y, def.size * 0.75, time, reduced, shot.delay * 40);
           if (shot.weapon === 'Ion') {
             ctx.strokeStyle = def.core;
             ctx.lineWidth = 1.6;
@@ -907,8 +919,10 @@
       ctx.rotate(-recoil * 0.02);
       if (view.overcharge) Art.glowCircle(ctx, 0, 0, 0.9, '#ffb35a', 0.45 + Math.sin(time * 10) * 0.15);
       // Beta 1.2 Kometenschweif: a static streak behind the engine (the moving sparks are added after the ship)
-      const engineLook = window.SpaceKittensForge?.LOOKS?.[view.cosmeticEngine];
-      if (engineLook) {
+      const engineLook = window.SpaceKittensForge?.LOOKS?.[view.cosmeticEngine],
+        // P1.4: the shared engine trail (sparks, crystal shards, cogs) in the ship's own frame
+        trailDrawn = Boolean(window.CosmeticArt?.engineTrail(ctx, view.cosmeticEngine, { x: -0.42, y: 0.08 }, { x: -1.75, y: 0.08 }, 0.1, time, reduced));
+      if (engineLook && !trailDrawn) {
         const tail = ctx.createLinearGradient(-1.6, 0, -0.35, 0);
         tail.addColorStop(0, 'rgba(255,255,255,0)');
         tail.addColorStop(1, engineLook.color);
@@ -925,7 +939,7 @@
         view.ship,
         time,
         Art.SHIP_PALETTES[view.cosmeticShip] || Art.SHIP_PALETTES.default,
-        Kit.ROSTER[view.pilot],
+        Kit.dressed ? Kit.dressed(Kit.ROSTER[view.pilot], view.pilotWear) : Kit.ROSTER[view.pilot],
         pilot.mood
       );
       ctx.restore();
@@ -973,7 +987,7 @@
           ctx.fill();
         }
       }
-      if (engineLook && !reduced && Math.random() < 0.5)
+      if (engineLook && !trailDrawn && !reduced && Math.random() < 0.5)
         particles.spawn({ x: geo.player.x - geo.shipScale * 1.6 * 0.42, y: geo.player.y + bob + geo.shipScale * 0.12, vx: -110 - Math.random() * 40, vy: (Math.random() - 0.5) * 18, drag: 1.2, life: 0.55, size: 2.2, color: Math.random() < 0.5 ? engineLook.color : engineLook.core, kind: 'spark' });
       if (view.cat) {
         drawCatGlider(ctx);

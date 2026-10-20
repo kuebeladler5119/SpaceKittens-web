@@ -1,6 +1,6 @@
 // PWA offline support. Network-first so updates are picked up immediately; cache is the offline fallback.
 // Not registered inside the Android app (Capacitor serves files locally) or on local dev hosts.
-const CACHE = 'space-kittens-fb-f710c44503da';
+const CACHE = 'space-kittens-fb-a0c31cbdea82';
 const CORE = [
   "./arena-ui.js",
   "./arena.js",
@@ -30,9 +30,12 @@ const CORE = [
   "./challenge.js",
   "./chest-reveal.js",
   "./cogsworth-ui.js",
+  "./collection.js",
   "./combat-cat-ui.js",
   "./combat-cat.js",
+  "./combat-control.js",
   "./combat-gun.js",
+  "./combat-tutorial.js",
   "./combat-ui.js",
   "./config.js",
   "./core.js",
@@ -53,14 +56,18 @@ const CORE = [
   "./freight.js",
   "./friends-beta.js",
   "./frostbyte.js",
+  "./ftue.js",
   "./game-data.js",
   "./game.js",
+  "./gear-loop.js",
   "./income.js",
   "./",
   "./index.html",
   "./industry-ui.js",
   "./industry.js",
   "./legal.css",
+  "./logistics.js",
+  "./lore.js",
   "./manifest.webmanifest",
   "./market.js",
   "./mekhanos.js",
@@ -79,6 +86,7 @@ const CORE = [
   "./privacy.html",
   "./pyra-ui.js",
   "./pyra.js",
+  "./rematch.js",
   "./research-ui.js",
   "./research.js",
   "./reveal.js",
@@ -88,6 +96,8 @@ const CORE = [
   "./scenes/colony-art.js",
   "./scenes/colony-scene.js",
   "./scenes/combat-scene.js",
+  "./scenes/cosmetic-art.js",
+  "./scenes/dna-visuals.js",
   "./scenes/enemy-art-outer.js",
   "./scenes/enemy-art.js",
   "./scenes/kittens.js",
@@ -98,11 +108,13 @@ const CORE = [
   "./scenes/pyra-art.js",
   "./scenes/ship-art.js",
   "./scenes/viridia-art.js",
+  "./ship-studio.js",
   "./shop-ui.js",
   "./styles.css",
   "./transport.js",
   "./views-ux.js",
   "./viridia.js",
+  "./wardrobe.js",
   "./world-shell.js"
 ];
 

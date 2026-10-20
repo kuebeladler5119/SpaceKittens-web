@@ -176,11 +176,14 @@ function onboardingHint() {
     '<i class="coach-ring" id="coachRing" aria-hidden="true"></i><div class="coach-bubble" id="coachBubble" role="status" aria-live="polite"><span class="coach-face" id="coachFace" aria-hidden="true"></span><div class="coach-copy"><small id="coachKicker"></small><b id="coachTitle"></b><p id="coachText"></p><button class="coach-action hidden" id="coachAction" type="button"></button></div><button class="coach-close" id="coachClose" type="button" aria-label="Hinweise ausblenden (unter ☰ → Hilfe wieder einschalten)">×</button><i class="coach-arrow" id="coachArrow" aria-hidden="true"></i></div>';
   document.body.append(coach);
 })();
+// the elements marked as the hint's target (only this file marks them; render() clears them without a document query)
+const onboardingMarked = new Set();
 function onboardingTargetRect(hint) {
   const t = hint?.target;
   if (!t) return null;
   if (t instanceof Element) {
     t.classList.add('coach-target');
+    onboardingMarked.add(t);
     return onboardingVisible(t);
   }
   return t;
@@ -265,7 +268,8 @@ function renderOnboarding() {
     step = active ? onboardingStep() : null;
   document.body.classList.toggle('ob-active', Boolean(step));
   document.body.dataset.obStep = step || '';
-  document.querySelectorAll('.coach-target').forEach(el => el.classList.remove('coach-target'));
+  for (const el of onboardingMarked) el.classList.remove('coach-target');
+  onboardingMarked.clear();
   // the hints about the Kristallmine bring it into view once (a gentle camera pan; the player can drag away freely)
   if ((step === 'upgrade' || step === 'manager') && onboardingFocusedStep !== step && currentScreen() === 'home') {
     const scene = window.NebulaScenesRuntime?.mounted?.colony?.scene;
@@ -292,7 +296,7 @@ function renderOnboarding() {
     $('coachTitle').textContent = hint.title;
     $('coachText').textContent = hint.text;
     $('coachText').hidden = !hint.text;
-    const face = window.SpaceKittens?.portraitURL?.(0, hint.step === 'celebrate' ? 'happy' : 'neutral', 96, [state.meta.equipped?.mochi, state.meta.equipped?.outfit].filter(Boolean));
+    const face = kitPortraitURL('mochi', hint.step === 'celebrate' ? 'happy' : 'neutral', 96);
     $('coachFace').innerHTML = face ? `<img src="${face}" alt="" />` : '🐾';
   }
   const action = $('coachAction');

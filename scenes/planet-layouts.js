@@ -156,6 +156,51 @@
       sky: { planet: [0.78, 0.16], aurora: true, snow: false }
     }
   };
+  // Beta 1.8 A2: a compact colony. The layouts above were drawn with wide gaps (Orion: 66 kitten widths, 11–13 phone
+  // screens; every station a screen of its own, measured with tools/nav-probe.mjs). Each gap between two neighbouring
+  // structures now shrinks to GAP_KEEP of its width, but never below what the structures need (MIN_GAP, the mine site
+  // with its headframe and cart start needs more, the spaceport pad too). Everything between the structures – terrain,
+  // platforms, paths, poles, districts, landmarks, lava, the root node – is mapped piecewise-linearly with them, so the
+  // world keeps its shape, only shorter. The economy never reads these distances (scenes only).
+  const GAP_KEEP = 0.6,
+    MIN_GAP = 5,
+    MIN_GAP_AT = { mine: 6.8, dock: 5.8, elevator: 5.6 },
+    TAIL_MIN = 3.4;
+  function compact(L) {
+    const names = Object.keys(L.plots).sort((a, b) => L.plots[a] - L.plots[b]),
+      oldX = names.map(n => L.plots[n]),
+      newX = [];
+    oldX.forEach((x, i) => {
+      if (!i) return newX.push(x);
+      const need = Math.max(MIN_GAP, MIN_GAP_AT[names[i]] || 0, MIN_GAP_AT[names[i - 1]] || 0);
+      newX.push(newX[i - 1] + Math.max(need, (x - oldX[i - 1]) * GAP_KEEP));
+    });
+    const width = newX[newX.length - 1] + Math.max(TAIL_MIN, (L.width - oldX[oldX.length - 1]) * 0.8),
+      from = [0, ...oldX, L.width],
+      to = [0, ...newX, width];
+    const map = x => {
+      if (x <= 0) return x;
+      for (let i = 1; i < from.length; i++)
+        if (x <= from[i]) return to[i - 1] + ((x - from[i - 1]) / Math.max(1e-6, from[i] - from[i - 1])) * (to[i] - to[i - 1]);
+      return width + (x - L.width);
+    };
+    const m2 = r => ({ ...r, from: map(r.from), to: map(r.to) });
+    return {
+      ...L,
+      width,
+      wideWidth: L.width,
+      plots: Object.fromEntries(names.map((n, i) => [n, Math.round(newX[i] * 100) / 100])),
+      terrain: L.terrain.map(([x, dy]) => [map(x), dy]),
+      platforms: L.platforms?.map(m2),
+      paths: L.paths?.map(([a, b]) => [map(a), map(b)]),
+      poles: L.poles?.map(map),
+      districts: L.districts?.map(m2),
+      lava: L.lava ? m2(L.lava) : L.lava,
+      landmarks: L.landmarks?.map(l => ({ ...l, x: map(l.x), ...(l.to !== undefined ? { to: map(l.to) } : {}) })),
+      rootNode: L.rootNode !== undefined ? map(L.rootNode) : L.rootNode
+    };
+  }
+  for (const id of Object.keys(LAYOUTS)) LAYOUTS[id] = compact(LAYOUTS[id]);
   // Glacies-only structures (other planets never show them).
   const SPECIAL_PLOTS = { ice: ['frostDrill', 'thermal'], volcanic: ['foundry'], machine: ['workshop'], verdant: ['sporeGarden', 'biolab'] };
   function layoutFor(planetId) {

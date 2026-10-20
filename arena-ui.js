@@ -301,7 +301,9 @@ renderCampaignCard = () => {
     const intro = card.querySelector('.wave-track + .arsenal-note');
     if (intro) intro.textContent = 'Arena: Dein Schiff zielt und feuert selbst, alle Gegner der Welle greifen gleichzeitig an. Entscheidend sind DNA-Waffe und Affinität, Werft, Tikki und deine zwei Fähigkeiten – Schildpuls und Overcharge-Salve.';
     const line = card.querySelector('.wave-next small'),
-      wave = arenaRun ? arenaRun.wave : campaignCleared(key);
+      // P1.4: only a wave fight of this campaign names its wave (a guardian fight – 'boss' – or a fight on another world
+      // used to break this line)
+      wave = arenaRun && arenaRun.key === key && typeof arenaRun.wave === 'number' ? arenaRun.wave : campaignCleared(key);
     if (line) line.textContent = '🛡 Hülle ' + fmt(shipHullNow()) + '/' + fmt(shipHullMax()) + ' · ' + arenaWaveFoes(key, wave).length + ' Gegner · ' + waveRewardText(key, wave);
   }
   let extra = `<div class="arena-mode" role="radiogroup" aria-label="Kampfansicht"><button role="radio" aria-checked="${arena}" class="${arena ? 'active' : ''}" data-campaign-mode="arena" ${arenaRun || campaignRun() ? 'disabled' : ''}>⚔ ARENA</button><button role="radio" aria-checked="${!arena}" class="${!arena ? 'active' : ''}" data-campaign-mode="classic" ${arenaRun || campaignRun() ? 'disabled' : ''}>KLASSISCH</button></div>`;

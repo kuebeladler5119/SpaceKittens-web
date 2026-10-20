@@ -44,8 +44,7 @@
   window.addEventListener('resize', () => runtime.refreshAll());
 
   // Kitten portraits for static UI (brand, intro).
-  const accessory = typeof state !== 'undefined' ? state.meta?.equipped?.mochi : null;
-  const portrait = window.SpaceKittens?.portraitURL(0, 'happy', 96, accessory ? [accessory] : null);
+  const portrait = typeof kitPortraitURL === 'function' && typeof state !== 'undefined' ? kitPortraitURL('mochi', 'happy', 96) : window.SpaceKittens?.portraitURL(0, 'happy', 96, null);
   if (portrait) {
     document.getElementById('brandKitten')?.setAttribute('src', portrait);
     document.getElementById('introKitten')?.setAttribute('src', portrait);

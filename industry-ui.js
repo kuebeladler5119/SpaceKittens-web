@@ -131,13 +131,33 @@ function hireManager(workplace) {
   render();
   return true;
 }
+// P1.4: what a Meisterstufe still needs, in words ("3. Lichtzyklus und Verkaufsstand Lv 15 für die Meisterstufe 8")
+// the Meisterbrief is written before every Lichtzyklus (training restarts at 1 there) and after loading a save
+if (typeof performPrestige === 'function') {
+  const performPrestigeBeforeMastery = performPrestige;
+  performPrestige = (...args) => {
+    staffMasterySync();
+    return performPrestigeBeforeMastery(...args);
+  };
+}
+staffMasterySync();
+function staffBlockText(workplace, block) {
+  const parts = [];
+  if (block.cycles) parts.push(block.cycles + '. Lichtzyklus');
+  if (block.building) parts.push(WORKPLACE[workplace].name + ' Lv ' + block.building);
+  return parts.join(' und ') + ' für die Meisterstufe ' + block.level;
+}
 function trainManager(workplace) {
   const colony = colonyAt();
   if (!(colony.staff[workplace] > 0) || colony.staff[workplace] >= STAFF_MAX_LEVEL) return false;
+  // P1.4: a Meisterstufe needs the station's own building at its milestone level first
+  const block = staffTrainBlock(workplace);
+  if (block) return toast('Noch ' + staffBlockText(workplace, block)), false;
   const price = staffUpgradeCost(workplace);
   if (state.credits < price) return toast('Noch ' + fmt(price - state.credits) + ' Credits für die Fortbildung'), false;
   state.credits -= price;
   colony.staff[workplace]++;
+  staffMasterySync(); // P1.4: the Meisterbrief remembers the level
   GameEvents.emit('manager-upgrade', { planet: state.activePlanet, workplace, level: colony.staff[workplace] });
   feedback('upgrade', 'light');
   save();
@@ -246,6 +266,22 @@ function reserveRow(workplace) {
     n => `<button role="radio" aria-checked="${n === charges}" class="${n === charges ? 'active' : ''}" data-reserve="${n}">${label(n)}</button>`
   ).join('')}</div><p class="reserve-facts"><span>geschützt ${fmt(units)}</span><span>Lager ${fmt(depot)}</span><span>verkaufbar ${fmt(sellableRaw(index))}</span><span>1 Charge = ${fmt(size)} (1 ${product}: ${need})</span><span class="${ready ? 'ok' : 'short'}">${ready ? '✓ Handbetrieb möglich' : '✕ Für Handbetrieb fehlen ' + fmt(Math.ceil(need - depot)) + ' Rohkristalle'}</span>${!charges && sales && !isAutomated(workplace) ? '<span class="short">Händler verkaufen sonst alles</span>' : ''}</p></div>`;
 }
+// Beta 1.9 M2: the routes a building sends or receives (sheet level 2): carrier, walk, runs on the way, load per run,
+// use of the target's rate, what waits there, a jam, and what the next carrier tier brings (all from logistics.js).
+const HAUL_ROUTES_OF = { depot: ['stallRaw', 'dockRaw', 'feed'], sorter: ['stallRaw', 'dockRaw'], refinery: ['feed', 'stallBars', 'dockBars'], stall: ['stallRaw', 'stallBars'], dock: ['dockRaw', 'dockBars'] };
+const HAUL_STORE_NAME = { shelf: 'im Regal', pad: 'auf der Rampe', hopper: 'im Trichter' };
+function haulRow(workplace) {
+  const ids = HAUL_ROUTES_OF[workplace];
+  if (!ids || typeof haulReport !== 'function' || !workplaceExists(workplace)) return '';
+  const rows = haulReport(state.activePlanet).filter(r => ids.includes(r.id) && (r.capacity > 0 || r.out > 0));
+  if (!rows.length) return '';
+  const sec = v => v.toFixed(1).replace('.', ',') + ' s';
+  return `<div class="sheet-reserve sheet-routes"><div class="reserve-head"><b>Wege</b><small>Was Träger zwischen den Gebäuden wirklich bewegen.</small></div>${rows
+    .map(
+      r => `<div class="route-row${r.blocked ? ' blocked' : ''}" data-route="${r.id}"><b>${r.name}</b><span>${r.tierName} · ${sec(r.travel)} Weg</span><span>${r.out} unterwegs · ${fmt(r.perRun)} je Fahrt</span><span>Auslastung ${Math.round(r.use * 100)} % · ${fmt(r.store)} ${HAUL_STORE_NAME[HAUL_LEGS[r.id].to]}</span>${r.blocked ? `<span class="short">⚠ ${r.blocked}</span>` : ''}${r.next && r.next.travel < r.travel - 0.05 ? `<small>${r.next.name} ab ${r.next.building} Lv ${r.next.level}: etwa ${sec(r.next.travel)}</small>` : ''}</div>`
+    )
+    .join('')}</div>`;
+}
 // Beta 1.7 M2: Verteilung of the depot (sheet level 2 of the depot, refinery, stall and dock). Sell surplus raw / bars,
 // a minimum stock, and whether production orders come before the sale. The live line shows where the raw goes.
 const ALLOC_SHEETS = ['depot', 'sorter', 'refinery', 'stall', 'dock'];
@@ -324,8 +360,12 @@ function managerRow(workplace) {
     html = `<div class="sheet-manager">${portraitImg(job, duty.id)}<div><b>${def.name} · Rang ${duty.rank}</b><small>${PROFESSIONS[job].name}-Spezialist · ${WORKPLACE[workplace].stage} automatisch · ${managerEffectText(workplace)}</small></div><button data-unassign="${duty.id}">ABZIEHEN</button></div>`;
   } else if (duty) {
     const price = staffUpgradeCost(workplace),
-      max = duty.level >= STAFF_MAX_LEVEL;
-    html = `<div class="sheet-manager">${portraitImg(job)}<div><b>${workplaceTitle(workplace)} · Lv ${duty.level}</b><small>${duty.converted ? 'Übernommen aus deinem alten Betrieb · ' : ''}${WORKPLACE[workplace].stage} automatisch · ${managerEffectText(workplace)}</small></div><button data-train="${workplace}" ${max || state.credits < price ? 'disabled' : ''}>${max ? 'MAX' : 'FORTBILDEN · ◈ ' + fmt(price)}</button></div>`;
+      max = duty.level >= STAFF_MAX_LEVEL,
+      block = max ? null : staffTrainBlock(workplace),
+      // P1.4: the Meisterstufen are named (and what the next one needs); a master wears its medal in the title
+      master = STAFF_TRAINING.master[duty.level + 1],
+      medal = duty.level >= 7 ? ' 🎖' : '';
+    html = `<div class="sheet-manager">${portraitImg(job)}<div><b>${workplaceTitle(workplace)} · Lv ${duty.level}${medal}</b><small>${duty.converted ? 'Übernommen aus deinem alten Betrieb · ' : ''}${WORKPLACE[workplace].stage} automatisch · ${managerEffectText(workplace)}${block ? ` · Noch ${staffBlockText(workplace, block)}` : master && !max ? ` · Meisterstufe ${duty.level + 1}` : ''}</small></div><button data-train="${workplace}" ${max || block || state.credits < price ? 'disabled' : ''}>${max ? 'MAX' : block ? (block.cycles ? '🔒 ZYKLUS ' + block.cycles : '🔒 LV ' + block.building) : 'FORTBILDEN · ◈ ' + fmt(price)}</button></div>`;
   } else {
     const price = hireCost(workplace);
     html = `<div class="sheet-manager manual"><i class="manager-icon">${PROFESSIONS[job].icon}</i><div><b>Handbetrieb</b><small>Ein ${workplaceTitle(workplace)} übernimmt nur ${WORKPLACE[workplace].stage} – sonst nichts.</small></div><button data-hire="${workplace}" ${state.credits < price ? 'disabled' : ''}>EINSTELLEN · ◈ ${fmt(price)}</button></div>`;
@@ -390,10 +430,10 @@ function renderIndustrySheet(sheet, key) {
   const manual = workplace && workplaceExists(workplace) ? `<button class="sheet-manual" data-manual="${workplace}">${WORKPLACE[workplace].verb}</button>` : '';
   // Beta 1.7: level 1 (what it does, its manager, special actions, the upgrade) first; level 2 (stocks and the
   // distribution) behind "Details"; the K62 recipe reserve of specialty buildings stays on level 1, so the upgrade button is in reach on a phone without scrolling the panel
-  const details = workplace ? stockChips(workplace) + allocRow(workplace) : '';
+  const details = workplace ? stockChips(workplace) + haulRow(workplace) + allocRow(workplace) : '';
   setHTML(
     sheet,
-    `<button class="sheet-close" data-close-sheet aria-label="Schließen">×</button><div class="sheet-head"><span>${icon}</span><div><b>${title}</b><small>${role}</small></div></div><p class="sheet-effect">${effect}</p>${workplace ? stationRow(workplace) : ''}${workplace ? refuelRow(workplace) : ''}${workplace ? reserveRow(workplace) : ''}${workplace ? managerRow(workplace) : ''}${window.sheetExtra?.(key) || ''}${batchBar}<div class="sheet-actions">${manual}${buy}</div>${details ? `<button class="sheet-more" data-sheet-more aria-expanded="${sheetDetailsOpen}">${sheetDetailsOpen ? 'Details ▴' : 'Details: Lager und Verteilung ▾'}</button>${sheetDetailsOpen ? `<div class="sheet-details">${details}</div>` : ''}` : ''}`
+    `<button class="sheet-close" data-close-sheet aria-label="Schließen">×</button><div class="sheet-head"><span>${icon}</span><div><b>${title}</b><small>${role}</small></div></div><p class="sheet-effect">${effect}</p>${workplace ? stationRow(workplace) : ''}${workplace ? refuelRow(workplace) : ''}${workplace ? reserveRow(workplace) : ''}${workplace ? managerRow(workplace) : ''}${window.sheetExtra?.(key) || ''}${batchBar}<div class="sheet-actions">${manual}${buy}</div>${details ? `<button class="sheet-more" data-sheet-more aria-expanded="${sheetDetailsOpen}">${sheetDetailsOpen ? 'Details ▴' : 'Details: Lager, Wege und Verteilung ▾'}</button>${sheetDetailsOpen ? `<div class="sheet-details">${details}</div>` : ''}` : ''}`
   );
   sheet.classList.remove('hidden');
 }
@@ -499,6 +539,8 @@ function renderIndustryChain() {
     const manualStage = ![auto.mine, auto.rail, sellsAuto].every(Boolean),
       status = manualStage
         ? ['Handbetrieb', 'idle']
+        : typeof liftWaiting === 'function' && liftWaiting()
+          ? ['Aufzug wartet', 'limited']
         : depot >= depotCap * 0.92
           ? ['Lager voll', 'limited']
           : colony.stock.pile >= pileCap * 0.92
@@ -539,10 +581,12 @@ function industryObjective() {
   return null;
 }
 const renderObjectiveBeforeIndustry = renderObjective;
+// Beta 1.9 M4: base objectives that name a building open it (a tap on "Mine ausbauen" did nothing – b19-ftue-probe)
+const BASE_OBJECTIVE_SHEET = { 'Mine ausbauen': '0', 'Transportengpass lösen': '3' };
 renderObjective = function () {
   renderObjectiveBeforeIndustry();
   const card = $('objectiveCard');
-  card.dataset.sheet = '';
+  card.dataset.sheet = BASE_OBJECTIVE_SHEET[$('objectiveTitle').textContent] || '';
   const story = pips().stage;
   if (story === 'warned' || story === 'battle' || story === 'defeated') return;
   const goal = industryObjective();
@@ -838,6 +882,24 @@ window.NebulaView.colony = () => {
       };
     })(),
     trip: colony.trip ? { progress: Math.min(1, Math.max(0, (Date.now() - colony.trip.departAt) / Math.max(1, colony.trip.arriveAt - colony.trip.departAt))), waiting: Date.now() >= colony.trip.arriveAt } : null,
+    // Beta 1.9 M2/M3: the hand-overs after the depot (logistics.js) exactly as the economy moves them: every run with its
+    // load and phase, interpolated between production ticks; the carrier's tier follows the level of the building it
+    // serves (hand → wheelbarrow → wagon → hover), the fill compares a load with one interval of that leg's rate
+    haul: (() => {
+      if (typeof haulView !== 'function' || !colony.haul) return null;
+      const age = Math.min(1.2, Math.max(0, (Date.now() - (flow?.at || Date.now())) / 1000)),
+        hv = haulView(index, age),
+        rate = withPlanet(index, () => ({ shelf: stallRate(), pad: dockRate(), hopper: feedRate() }));
+      Object.entries(hv.legs).forEach(([id, leg]) => {
+        const unit = Math.max(1, rate[leg.to] * haulInterval(index, id));
+        leg.tier = haulTier(index, id);
+        leg.loadingFill = Math.min(1, leg.loading / unit);
+        leg.runs.forEach(r => (r.fill = Math.min(1, r.units / unit)));
+      });
+      hv.shelfRatio = Math.min(1, hv.shelfUnits / Math.max(1, rate.shelf * haulInterval(index, 'stallRaw')));
+      hv.padRatio = Math.min(1, hv.padUnits / Math.max(1, rate.pad * haulInterval(index, 'dockRaw')));
+      return hv;
+    })(),
     hopperRatio: colony.stock.hopper / Math.max(1, hopperCapacity()),
     barsRatio: colony.stock.bars / Math.max(1, barCapacity()),
     packedRatio: (colony.stock.packed || 0) / Math.max(1, packCapacity(index)),
@@ -869,7 +931,13 @@ window.NebulaView.colony = () => {
       pumping: Boolean(fresh && flow.resinExtracted > 0),
       feeding: Boolean(fresh && flow.fed > 0),
       refining: Boolean(fresh && flow.processed > 0),
-      selling: Boolean(fresh && flow.rawSold + flow.barsSold + (flow.packedSold || 0) > 0)
+      selling: Boolean(fresh && flow.rawSold + flow.barsSold + (flow.packedSold || 0) > 0),
+      // Beta 1.8 A7: which goods the market sells right now (the porters carry the right ones)
+      rawSelling: Boolean(fresh && flow.rawSold + (flow.packedSold || 0) > 0),
+      barsSelling: Boolean(fresh && flow.barsSold > 0),
+      // Beta 1.9 M2: customers buy at the shelf / the freighter loads at the pad (the hauls' sale process)
+      customers: Boolean(fresh && flow.shelfSold > 0),
+      freighting: Boolean(fresh && flow.padSold > 0)
     }
   };
 };

@@ -199,6 +199,8 @@
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(size, size);
+      opts.px = size; // P1: detail by drawn size
+      opts.calm = reduced;
       Kit.drawKitten(ctx, look, opts);
       ctx.restore();
     }
@@ -488,11 +490,11 @@
         }
       }
       // Mochi checks the opening; Void (once met) keeps Mochi company by the headframe
-      const mochiLook = Kit.ROSTER?.[0];
+      const mochiLook = Kit.dressed ? Kit.dressed(Kit.ROSTER[0], view.mochiWear) : Kit.ROSTER?.[0]; // P1: in what Mochi wears
       if (mochiLook) kitten(ctx, mochiLook, Math.min(w - 0.5 * k, L.ex + 6.2 * k), L.ground + 0.04 * k, k * 0.8, { pose: view.open ? 'idle' : 'discover', t: time, seed: 3, facing: -1 });
       if (view.voidHere && Kit.VOID) {
         const vx = L.ex + 1.35 * k;
-        kitten(ctx, Kit.VOID, vx, L.ground + 0.04 * k, k * 0.72, { pose: Math.sin(time * 0.4) > 0.6 ? 'wave' : 'idle', t: time, seed: 17, facing: 1 });
+        kitten(ctx, Kit.dressed ? Kit.dressed(Kit.VOID, view.voidWear) : Kit.VOID, vx, L.ground + 0.04 * k, k * 0.72, { pose: Math.sin(time * 0.4) > 0.6 ? 'wave' : 'idle', t: time, seed: 17, facing: 1 });
         addHit({ x0: vx - 0.45 * k, y0: L.ground - 1 * k, x1: vx + 0.45 * k, y1: L.ground + 0.1 * k }, 'void', 'void');
       }
     }
@@ -622,6 +624,38 @@
       }
       if (f.kind === 'construction') return drawConstruction(ctx, f, i, top, y);
       // Beta 1.7 M9: the planetary core – a great crystal heart; its cracks close stage by stage, it glows when healed
+      // Beta 1.9 M7: Glacies' Thermalkern – a glowing heat sphere in an ice shell; each healed stage melts one ice plate
+      if (f.kind === 'core' && f.coreKey === 'ice') {
+        const cx = (L.tunnelX0 + w) / 2 + 0.6 * k,
+          cy = top + L.fh * 0.55,
+          r0 = Math.min(L.fh * 0.34, 1.5 * k),
+          healed = f.phase === 'healed',
+          heat = 0.25 + 0.25 * f.stage,
+          pulse = reduced ? 0.7 : 0.6 + Math.sin(time * (healed ? 2.4 : 1.1)) * 0.2;
+        window.NebulaArt.glowCircle(ctx, cx, cy, r0 * (healed ? 3 : 2), healed ? '#ffb35a' : '#ff8f6b', pulse * heat);
+        ctx.fillStyle = healed ? '#ffd77a' : '#ff9e5a';
+        ctx.beginPath();
+        ctx.arc(cx, cy, r0 * 0.75, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.beginPath();
+        ctx.arc(cx - r0 * 0.25, cy - r0 * 0.25, r0 * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        // the ice plates still to melt (3 → 0), around the sphere
+        for (let p = f.stage; p < 3; p++) {
+          const a0 = -Math.PI / 2 + p * ((Math.PI * 2) / 3);
+          ctx.fillStyle = 'rgba(200,236,255,0.85)';
+          ctx.beginPath();
+          ctx.arc(cx, cy, r0 * 1.05, a0, a0 + (Math.PI * 2) / 3 - 0.12);
+          ctx.arc(cx, cy, r0 * 0.7, a0 + (Math.PI * 2) / 3 - 0.12, a0, true);
+          ctx.closePath();
+          ctx.fill();
+        }
+        if (!reduced && f.stage > 0) for (let i = 0; i < f.stage; i++) window.NebulaArt.glowCircle(ctx, cx - r0 + i * r0, cy - r0 * 1.2 - ((time * 0.5 + i / 3) % 1) * r0, r0 * 0.3, '#ffffff', 0.25);
+        label(ctx, L.tunnelX0 + 0.25 * k, labelTop(f, i), f.title, f.sub, healed ? '#ffd77a' : '#ffb39a');
+        addHit({ x0: L.tunnelX0, y0: top + L.fh * 0.25, x1: w, y1: y + 0.2 * k }, 'core', 'ice');
+        return;
+      }
       if (f.kind === 'core') {
         const cx = (L.tunnelX0 + w) / 2 + 0.6 * k,
           cy = top + L.fh * 0.55,
@@ -755,7 +789,12 @@
       const pickX = frontMinerX - 0.55 * k,
         fit = Math.max(1, Math.floor(Math.max(0.6 * k, pickX - (stationX + 0.6 * k)) / (0.6 * k)));
       const path = (from, to, p) => math.lerp(from, to, math.clamp(p, 0, 1));
-      (f.carriers || []).slice(0, Math.max(1, fit)).forEach((c, n) => {
+      // Visual Identity round: at most two carriers per floor are drawn (one on the way, one coming back or queueing);
+      // the rest of the floor's real carriers is one "+N" pill at the pick-up spot
+      const carriersShown = Math.min(2, Math.max(1, fit)),
+        carriersHidden = Math.max(0, (f.carriers || []).filter(c => f.auto || c.load > 0 || c.phase !== 'collecting').length - carriersShown);
+      if (carriersHidden) CA.crowdBadge?.(ctx, pickX, y - 0.95 * k, k, carriersHidden);
+      (f.carriers || []).slice(0, carriersShown).forEach((c, n) => {
         const p = phaseP(c),
           holding = c.load > 0;
         if (!f.auto && !holding && c.phase === 'collecting') return; // idle carriers rest out of sight
@@ -765,14 +804,15 @@
               : c.phase === 'returning'
                 ? path(platX + 0.3 * k, pickX, p)
                 : c.phase === 'collecting'
-                  ? pickX - 0.5 * k * n
+                  ? pickX - 0.7 * k * n
                   : platX + 0.3 * k + 0.35 * k * n,
           facing = c.phase === 'returning' || (c.phase === 'collecting' && !holding) ? 1 : -1,
           stage = f.haulStage || 1,
           walking = c.phase === 'carrying' || c.phase === 'returning';
         stats.carriersDrawn++;
-        const look = Kit.managerLook(Kit.WORKERS[(n + 2 + i) % Kit.WORKERS.length], MINER_OUTFIT, 1);
-        if (holding && stage >= 2) MA.haulLoad(ctx, x - 0.35 * k * facing, y + 0.06 * k, k, stage, c.load / Math.max(1, f.carrierLoad), f.zone, facing);
+        // Visual Identity round: carriers wear the transport uniform, miners the hard hat (a job reads at a glance)
+        const look = Kit.roleLook ? Kit.roleLook(Kit.WORKERS[(n + 2 + i) % Kit.WORKERS.length], 'transport') : Kit.managerLook(Kit.WORKERS[(n + 2 + i) % Kit.WORKERS.length], MINER_OUTFIT, 1);
+        if (holding && stage >= 2) MA.haulLoad(ctx, x - 0.35 * k * facing, y + 0.06 * k, k, stage, c.load / Math.max(1, f.carrierLoad), f.zone, facing, { skin: view.cosmeticVehicle, moving: walking, time, reduced });
         kitten(ctx, look, x, y + 0.1 * k, k * 0.72, {
           pose: holding && stage < 2 ? 'carry' : walking ? 'walk' : c.phase === 'waiting_for_space' ? 'worried' : 'idle',
           t: time,

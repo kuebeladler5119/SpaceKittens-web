@@ -429,7 +429,9 @@
     'ship-starlight': { hull: ['#3a4a9a', '#1c2258'], trim: '#ffd77a', engine: '#fff1b8' },
     // Beta 1.3 looks
     'ship-sakura': { hull: ['#fff4f8', '#f2a9c4'], trim: '#ff7aa8', engine: '#ffc4dc' },
-    'ship-mint': { hull: ['#e8fff4', '#7fd8b4'], trim: '#fff1d6', engine: '#8ff0d4' }
+    'ship-mint': { hull: ['#e8fff4', '#7fd8b4'], trim: '#fff1d6', engine: '#8ff0d4' },
+    // P1.4: a paint with a material – crystal facets and a running glint (scenes/ship-art.js)
+    'ship-frost': { hull: ['#f2fcff', '#7fbfe6'], trim: '#bff4ff', engine: '#9fe8ff', material: 'crystal' }
   };
   const SHIP_SHAPES = {
     Horizon: { len: 0.62, h: 0.26, fin: 'twin', nose: 0.2 },

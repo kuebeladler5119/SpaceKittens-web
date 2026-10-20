@@ -9519,6 +9519,47 @@ body[data-next-step='stall'] #sellButton {
     animation: nextStepPulse 1.6s ease-in-out infinite;
   }
 }
+/* Beta 1.9 M4: a full Halde – ABBAUEN says so, the LORE (which makes room) pulses */
+#collectButton.pile-full {
+  opacity: 0.6;
+  position: relative;
+}
+#collectButton.pile-full::after {
+  content: 'Halde voll';
+  position: absolute;
+  left: 50%;
+  top: -9px;
+  transform: translateX(-50%);
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: #ff8f8f;
+  color: #2a1530;
+  font-size: 0.62rem;
+  font-weight: 900;
+  white-space: nowrap;
+  pointer-events: none;
+}
+body:not(.reduce-motion) #cartButton.pile-full-next {
+  animation: nextStepPulse 1.6s ease-in-out infinite;
+}
+/* Beta 1.9 M4: a tap on the first-credits card makes the named dock step hop once */
+#collectButton.step-nudge,
+#cartButton.step-nudge,
+#sellButton.step-nudge,
+#sectorPanel button.step-nudge,
+#planetPanel button.step-nudge {
+  animation: stepNudge 0.7s ease-out 1;
+}
+body.reduce-motion .step-nudge {
+  animation: none;
+  outline: 3px solid #ffd77a;
+}
+@keyframes stepNudge {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.14); }
+  60% { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
 @keyframes nextStepPulse {
   50% {
     outline-color: rgba(255, 215, 122, 0.35);
@@ -13613,6 +13654,27 @@ body.world-home .story-bubble {
   min-height: 44px;
 }
 
+/* Beta 1.9 M2: the routes of a building (sheet level 2) */
+.sheet-routes .route-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.82rem;
+}
+.sheet-routes .route-row b {
+  flex-basis: 100%;
+}
+.sheet-routes .route-row small {
+  flex-basis: 100%;
+  opacity: 0.75;
+}
+.sheet-routes .route-row .short {
+  color: #ffb3a8;
+  font-weight: 800;
+}
+
 /* Beta 1.7 M4: a station's measured throughput, its use and what holds it back */
 .sheet-station {
   margin: 8px 0 0;
@@ -14606,4 +14668,2070 @@ body.ob-active .world-hud .resource-panel::after {
   background: rgba(255, 140, 160, 0.12);
   border-color: rgba(255, 140, 160, 0.6);
   color: #ffd0d9;
+}
+
+/* =====================================================================================================
+   Gameplay loop: equipment you can trust, loot that leads somewhere (gear-loop.js)
+   ===================================================================================================== */
+.dna-use {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.dna-use .good {
+  color: #8ff0d4;
+}
+.dna-use .warn {
+  color: #ffb38a;
+}
+.dna-use .dna-dir {
+  justify-self: start;
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: rgba(196, 179, 255, 0.16);
+  color: #e6defe;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.dna-use .dna-verdict {
+  margin-top: 2px;
+  color: #d8d2f5;
+  font-weight: 800;
+}
+.dna-use .dna-verdict.good {
+  color: #8ff0d4;
+}
+.dna-use .dna-verdict.warn {
+  color: #ffb38a;
+}
+.dna-use .dna-verdict small {
+  display: block;
+  color: #b4aedc;
+  font-weight: 600;
+}
+.dna-tools {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.dna-tools button {
+  flex: 1;
+  min-height: 40px;
+  font-size: 12px;
+}
+.dna-lock.on {
+  border-color: rgba(255, 215, 122, 0.7);
+  color: #ffe9a8;
+}
+.chest-next {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 10px;
+  text-align: left;
+}
+.chest-next:empty {
+  display: none;
+}
+.chest-next-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.chest-next-row > span {
+  flex: 1 1 60%;
+  min-width: 0;
+}
+.chest-next-row em {
+  font-style: normal;
+  color: #ffe9a8;
+  font-weight: 800;
+}
+.chest-next-row button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.chest-next-row .dna-compare {
+  margin: 4px 0 0;
+}
+.chest-guarantee {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.dna-weapon.dna-focus {
+  outline: 3px solid #ffd77a;
+  outline-offset: 2px;
+  transition: outline-color 0.4s;
+}
+.exp-weapon.recommended {
+  border-color: rgba(255, 215, 122, 0.8);
+}
+.exp-pick {
+  display: block;
+  font-style: normal;
+  font-weight: 900;
+  font-size: 11.5px;
+  color: #ffe9a8;
+}
+.exp-more {
+  margin-top: 8px;
+}
+.exp-more summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 13px;
+  color: #d8d2ff;
+}
+/* over the top of the stage, so switching between auto and manual never resizes the field */
+#expTop {
+  position: relative;
+}
+.exp-steer-row {
+  position: absolute;
+  z-index: 4;
+  top: 100%;
+  left: 12px;
+  display: flex;
+  pointer-events: none;
+}
+.exp-steer-row:empty {
+  display: none;
+}
+.exp-steer {
+  pointer-events: auto;
+  margin-top: 4px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font: 800 11.5px Nunito, sans-serif;
+  color: #c9c3f0;
+  background: rgba(20, 24, 62, 0.6);
+}
+button.exp-steer.manual {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(143, 240, 212, 0.6);
+  color: #dffbef;
+  background: rgba(20, 24, 62, 0.85);
+}
+button.exp-steer.manual b {
+  color: #8ff0d4;
+}
+/* progression after the first steps: tools and extras appear with real progress (gear-loop.js) */
+body.world-shell:not(.pg-nav) #sceneBar .district-nav,
+body.world-shell:not(.pg-tools) #sceneBar .scene-tools > :not(#homeSheetButton):not(#mineToggle) {
+  display: none !important;
+}
+body.world-shell:not(.pg-extras) .world-hud .daily-button,
+body.world-shell:not(.pg-extras) .world-hud .gem-balance {
+  display: none !important;
+}
+.production-locked {
+  margin-top: 8px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(196, 179, 255, 0.3);
+}
+.production-locked summary {
+  display: grid;
+  gap: 2px;
+  min-height: 48px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.production-locked summary small,
+.production-locked li small {
+  color: #b4aedc;
+  font-size: 11.5px;
+}
+.production-locked ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 10px;
+  display: grid;
+  gap: 6px;
+}
+.production-locked li {
+  display: grid;
+  gap: 1px;
+  font-size: 12.5px;
+}
+.market-group {
+  margin: 10px 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(196, 179, 255, 0.18);
+  break-inside: avoid;
+}
+.market-group > summary {
+  display: grid;
+  gap: 2px;
+  min-height: 52px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.market-group > summary small {
+  color: #b4aedc;
+  font-size: 12px;
+}
+.market-group[open] > summary {
+  border-bottom: 1px solid rgba(196, 179, 255, 0.15);
+}
+.market-group > :not(summary) {
+  margin-left: 10px;
+  margin-right: 10px;
+}
+.tab-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #ff9ec4;
+  color: #2a2244;
+  font: 900 11px/18px Nunito, sans-serif;
+  font-style: normal;
+}
+#buildingSheet:focus {
+  outline: none;
+}
+#buildingSheet:focus-visible {
+  outline: 3px solid #8ff0d4;
+}
+
+/* gameplay loop: the enemy role callout under the steering chip of the fight HUD */
+.exp-role {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 34px);
+  left: 12px;
+  max-width: min(calc(100% - 24px), 360px);
+  pointer-events: none;
+}
+.exp-role:empty {
+  display: none;
+}
+.exp-role span {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(20, 16, 48, 0.86);
+  border: 1px solid rgba(255, 179, 90, 0.55);
+  color: #f3eeff;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.exp-role b {
+  color: #ffd77a;
+  margin-right: 4px;
+}
+.exp-role i {
+  font-style: normal;
+  margin-right: 4px;
+}
+/* gameplay loop: the DNA tuning on the Werft card and its advice in the prep */
+.dna-tune {
+  margin-top: 6px;
+  display: grid;
+  gap: 4px;
+  font-size: 11.5px;
+}
+.dna-tune > small {
+  color: #b4aedc;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.dna-tune-switch {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.dna-tune-switch button {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 9px;
+  border: 0;
+  background: transparent;
+  color: #d8d2f5;
+  font: 800 12px/1.1 Nunito, sans-serif;
+}
+.dna-tune-switch button.on {
+  background: #8ff0d4;
+  color: #1d1840;
+}
+.dna-tune p {
+  margin: 0;
+  line-height: 1.35;
+  color: #e6defe;
+}
+.dna-tune .dna-tune-use {
+  color: #b4aedc;
+}
+.exp-tune {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.exp-tune button {
+  margin-left: 6px;
+  min-height: 40px;
+}
+/* Beta 1.8 A4: a slimmer manual dock on every portrait phone (was ~74 px a step; the world gets the space). Every
+   step stays ≥ 52 px tall and keeps its label, its stock line and its state. */
+@media (max-width: 759px) and (min-height: 701px) and (orientation: portrait) {
+  body.world-home .action-dock .production-chain .chain-step {
+    min-height: 52px;
+    padding: 4px 8px;
+  }
+  body.world-home .action-dock .production-chain .chain-step em,
+  body.world-home .action-dock .production-chain .chain-step small {
+    line-height: 1.15;
+  }
+  body.world-home .action-dock .dock-summary {
+    min-height: 26px;
+    margin-bottom: 3px;
+  }
+}
+/* Beta 1.8: Mochi's hint bubble never takes a drag from the world (a swipe across it moves the colony or the mine);
+   only its buttons (the action and ×) take taps */
+.coach-bubble {
+  pointer-events: none;
+}
+.coach-bubble button {
+  pointer-events: auto;
+}
+
+/* Beta 1.9 M6: finds as inputs and the collection */
+.artifact-card .artifact-use {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: #8ff0d4;
+}
+.artifact-collection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.artifact-collection span {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.artifact-collection span.unseen {
+  opacity: 0.45;
+}
+.artifact-collection small {
+  flex-basis: 100%;
+  opacity: 0.8;
+}
+
+/* Beta 1.9 M9: the Wächter-Revanche on a finished campaign's card */
+.rematch-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(196, 179, 255, 0.12);
+}
+.rematch-card small {
+  opacity: 0.85;
+}
+.rematch-line {
+  color: #c4b3ff;
+}
+
+/* ----- P1 Kätzchen-Studio: one scroll area (the box), a big stage, four slot tabs, compact tiles, a sticky action ----- */
+#studioModal {
+  padding: 12px;
+}
+.studio-box {
+  width: min(460px, 100%);
+  max-width: 460px;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 14px 0;
+}
+.modal-box .studio-balance {
+  margin: 2px 0 8px;
+  font-weight: 800;
+  color: #ffe9a8;
+  font-size: 13px;
+}
+.studio-chars {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.modal-box .studio-chars button {
+  min-height: 56px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: 14px;
+  background: #2a2c70;
+  color: var(--ink);
+  border: 2px solid transparent;
+}
+.studio-chars img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+.studio-chars i {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #15173f;
+  font-style: normal;
+  font-weight: 900;
+  color: var(--muted);
+}
+.studio-chars b {
+  font-size: 12px;
+}
+.studio-chars small {
+  font-size: 9.5px;
+  line-height: 1.1;
+  color: var(--muted);
+}
+.modal-box .studio-chars button.active {
+  border-color: var(--gold);
+  background: #34367f;
+}
+.modal-box .studio-chars button.locked {
+  opacity: 0.7;
+}
+.studio-stage {
+  position: relative;
+  margin: 10px 0 6px;
+  border-radius: 18px;
+  background: radial-gradient(circle at 50% 35%, #34388a, #181a4a 72%);
+  border: 1px solid #8378c455;
+  overflow: hidden;
+}
+#studioCanvas {
+  display: block;
+  width: 100%;
+  height: clamp(190px, 34dvh, 280px);
+}
+.studio-who {
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  font-size: 13px;
+  color: #e8e4fa;
+}
+.studio-tag {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #ffd77a;
+  color: #2a2040;
+  font-size: 11px;
+}
+.studio-tag.hidden {
+  display: none;
+}
+.studio-poses,
+.studio-slots {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+.modal-box .studio-poses button {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 4px;
+  border-radius: 12px;
+  background: #2a2c70;
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 12px;
+}
+.modal-box .studio-slots button {
+  flex: 1;
+  min-height: 52px;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  padding: 4px 2px;
+  border-radius: 14px;
+  background: #2a2c70;
+  color: var(--ink);
+  font-weight: 900;
+  font-size: 12px;
+}
+.studio-slots i {
+  font-style: normal;
+  font-size: 18px;
+}
+.modal-box .studio-poses button.active,
+.modal-box .studio-slots button.active {
+  background: var(--lime);
+  color: #15173f;
+}
+.studio-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+.modal-box .studio-item {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-height: 132px;
+  padding: 6px 4px 8px;
+  border-radius: 14px;
+  background: #262866;
+  color: var(--ink);
+  border: 2px solid transparent;
+}
+.studio-item canvas {
+  width: 72px;
+  height: 72px;
+}
+.studio-item b {
+  font-size: 11.5px;
+  line-height: 1.15;
+}
+.studio-item em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.studio-item em.worn {
+  background: var(--lime);
+  color: #15173f;
+}
+.studio-item em.owned {
+  background: #3d3f8f;
+  color: #cfeee3;
+}
+.studio-item em.price {
+  background: #ffe9a8;
+  color: #3a2a10;
+}
+.studio-item em.goal {
+  background: #4a3a7a;
+  color: #f2e6ff;
+}
+.modal-box .studio-item.picked {
+  border-color: var(--gold);
+  background: #303274;
+}
+.modal-box .studio-item.locked canvas {
+  opacity: 0.85;
+}
+.modal-box .studio-note {
+  min-height: 0;
+  margin: 0;
+  color: #ffe9a8;
+  font-size: 12px;
+}
+.studio-action {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 0 -14px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(31, 33, 92, 0.6), #1f215c 30%);
+}
+.modal-box .studio-action button {
+  flex: 1 1 96px;
+  min-height: 48px;
+  border-radius: 14px;
+  font-weight: 900;
+  color: #15173f;
+}
+.modal-box .studio-action button.secondary {
+  background: #3d3f8f;
+  color: var(--ink);
+}
+.modal-box .studio-action button.confirm {
+  background: var(--gold);
+}
+.modal-box .studio-action button:disabled {
+  background: #4a4a6a;
+  color: #b9b5d6;
+}
+.modal-box .studio-hint {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12.5px;
+}
+.modal-box .studio-small {
+  font-size: 11px;
+  margin: 4px 0 12px;
+}
+.studio-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  margin: 6px 0 10px;
+  padding: 8px 12px;
+  border-radius: 16px;
+  background: linear-gradient(90deg, #ffd77a, #ff9ecb);
+  color: #2a2040;
+  text-align: left;
+}
+.studio-entry i {
+  font-style: normal;
+  font-size: 26px;
+}
+.studio-entry span {
+  display: grid;
+}
+.studio-entry b {
+  font-size: 15px;
+}
+.studio-entry small {
+  font-size: 11.5px;
+  opacity: 0.85;
+}
+.story-action {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--gold);
+  color: #2a2040;
+  font-weight: 900;
+}
+.story-action.hidden {
+  display: none;
+}
+.story-bubble .story-action {
+  grid-column: 2 / 4;
+  grid-row: 2;
+  justify-self: start;
+}
+/* the studio keeps the stage free: a story line waits until it is closed */
+body:has(#studioModal:not(.hidden)) .story-bubble {
+  display: none;
+}
+
+/* Visual Identity round: the ship's DNA line under the description (role · tier · build) */
+.ship-dna-line {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffd77a;
+  letter-spacing: 0.02em;
+}
+
+/* ===== P1.2 Mobile UX: the scene bar ===== */
+/* The Mine is a main view in the navigation (bottom bar / rail): the bar's own ⛏ was the same jump a second time and
+   pushed the row past the screen edge. It stays in the DOM (state, older hints), hidden in the shell. */
+body.world-shell #sceneBar #mineToggle {
+  display: none !important;
+}
+/* the navigation's Mine shows that a mine can be built (before: the bar's ⛏ glowed) */
+.nav-item.nav-mine.ready {
+  position: relative;
+}
+.nav-item.nav-mine.ready::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: calc(50% - 16px);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 2px #121437;
+}
+/* the district picker: one button with the district in view; the jumps open as a list above the bar */
+.district-pick {
+  display: none;
+}
+.district-pick[hidden] {
+  display: none !important;
+}
+.scene-bar.compact .district-pick {
+  display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 220px;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 215, 122, 0.55);
+  background: rgba(20, 24, 62, 0.82);
+  backdrop-filter: blur(6px);
+  color: #ffe9a8;
+  font: 800 12.5px Nunito, sans-serif;
+  pointer-events: auto;
+}
+.scene-bar.compact .district-pick span {
+  font-size: 15px;
+}
+.scene-bar.compact .district-pick b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scene-bar.compact .district-pick i {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.8;
+  transition: transform 0.18s ease;
+}
+.scene-bar.compact.menu-open .district-pick i {
+  transform: rotate(180deg);
+}
+.scene-bar.compact .scene-tools {
+  margin-left: auto;
+}
+body.world-shell .scene-bar.compact .district-nav {
+  display: none;
+}
+body.world-shell .scene-bar.compact.menu-open .district-nav:not([hidden]) {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(240px, 100%);
+  padding: 6px;
+  border-radius: 18px;
+  border: 1px solid rgba(196, 179, 255, 0.3);
+  background: rgba(20, 24, 62, 0.94);
+  box-shadow: 0 14px 34px rgba(8, 10, 32, 0.55);
+  overflow: visible;
+  animation: districtMenuIn 0.16s ease-out;
+}
+body.world-shell .scene-bar.compact.menu-open .district-nav button {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 4px 12px;
+  background: transparent;
+  backdrop-filter: none;
+  border-color: transparent;
+}
+body.world-shell .scene-bar.compact.menu-open .district-nav button.active {
+  border-color: rgba(255, 215, 122, 0.6);
+  background: rgba(255, 215, 122, 0.12);
+}
+body.world-shell .scene-bar.compact.menu-open .district-nav button b {
+  display: inline !important;
+  font-size: 13px;
+}
+@keyframes districtMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+/* the full row (wide screens with room): the bar is as wide as its content, centred over the world */
+body.world-wide.world-home #sceneBar:not(.compact) {
+  width: max-content;
+  max-width: calc(100% - var(--w-rail, 0px) - 24px);
+}
+/* every bar button: a press answers at once; the active state (zoom on, the open list) is gold */
+#sceneBar button {
+  transition: transform 0.12s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+#sceneBar button:active {
+  transform: scale(0.94);
+}
+
+/* ===== P1.2 Mobile UX: the top of the world is one calm stack ===== */
+/* next step → sector event → place name / status; measured (--w-stack, world-shell.js), never overlapping */
+body.world-home .hero-card.has-scene .hero-copy {
+  top: calc(var(--w-stack, 110px) - var(--w-hud, 60px) + 6px);
+  transition: top 0.2s ease;
+}
+body.world-home .story-bubble {
+  top: calc(var(--w-stack, 110px) + 8px);
+}
+body.world-home .hero-card.has-scene .hero-copy .scene-status:empty {
+  display: none;
+}
+/* the next step: quieter frame (it is a hint, not an alarm) */
+body.world-home #objectiveCard {
+  border-color: rgba(128, 239, 206, 0.3);
+  box-shadow: 0 6px 16px rgba(19, 20, 57, 0.35);
+}
+/* the sector event: one row (icon, name with its reward, the action, ×); the story text lives in the action's dialog */
+body.world-home #eventCard:not(.hidden) {
+  top: calc(var(--w-hud, 76px) + 56px);
+  min-height: 44px;
+  padding: 3px 4px 3px 10px;
+  gap: 8px;
+  border-color: rgba(242, 204, 115, 0.4);
+  overflow: hidden;
+}
+body.world-home #eventCard .event-icon {
+  font-size: 18px;
+}
+body.world-home #eventCard > div {
+  min-width: 0;
+}
+body.world-home #eventCard small,
+body.world-home #eventCard p {
+  display: none;
+}
+body.world-home #eventCard h3 {
+  margin: 0;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.world-home #eventCard em {
+  margin-top: 1px;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.world-home #eventCard > #eventAction {
+  flex: none;
+  min-height: 44px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+body.world-home #eventCard > #eventIgnore {
+  position: static;
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+body.world-wide.world-home #eventCard p {
+  display: block;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* phones: the place name shows on arrival, then the sky is free; a bottleneck chip stays */
+body.world-shell:not(.world-wide).world-home .hero-card.has-scene .hero-copy {
+  background: transparent;
+  padding: 0;
+}
+body.world-shell:not(.world-wide).world-home .hero-card.has-scene .hero-copy h1 {
+  display: none;
+}
+body.world-shell:not(.world-wide).world-home .hero-card.has-scene.arrive .hero-copy {
+  padding: 4px 10px 5px;
+  background: rgba(20, 24, 62, 0.55);
+  animation: placeArrive 3.8s ease both;
+}
+body.world-shell:not(.world-wide).world-home .hero-card.has-scene.arrive .hero-copy h1 {
+  display: block;
+}
+@keyframes placeArrive {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  10%,
+  85% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+/* the narrowest phones: the picker shows the district's icon (its name is in the list and the label) */
+@media (max-width: 340px) {
+  .scene-bar.compact .district-pick b {
+    display: none;
+  }
+  .scene-bar.compact .district-pick {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+  }
+}
+
+/* ===== P1.2 Mobile UX: the mine HUD ===== */
+/* the bottleneck chip makes room for ✋ (before, the hand button sat on the chip's end) */
+body.world-mine .mine-hud:has(#mineDockToggle:not([hidden])) .mine-sub {
+  right: 162px;
+}
+/* the quick jumps behind one labelled button; the list opens below it with the jumps' names */
+.mine-jump-pick {
+  display: none;
+}
+body.world-mine .mine-nav {
+  flex-direction: column;
+  align-items: flex-end;
+}
+body.world-mine .mine-nav > button:not(#mineJumpPick) b {
+  display: none;
+}
+body.world-mine .mine-nav .mine-jump-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  min-height: 44px;
+  padding: 4px 12px;
+  font: 800 12px Nunito, sans-serif;
+}
+body.world-mine .mine-nav .mine-jump-pick i {
+  font-style: normal;
+  font-size: 10px;
+  opacity: 0.8;
+}
+body.world-mine .mine-nav:not(.open) > button:not(#mineJumpPick) {
+  display: none;
+}
+body.world-mine .mine-nav.open {
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(20, 18, 50, 0.92);
+  border: 1px solid rgba(196, 179, 255, 0.3);
+  box-shadow: 0 14px 34px rgba(8, 10, 32, 0.5);
+  animation: districtMenuIn 0.16s ease-out;
+}
+body.world-mine .mine-nav.open > button:not(#mineJumpPick) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 180px;
+  min-height: 44px;
+  padding: 4px 12px;
+  border-color: transparent;
+  background: transparent;
+  opacity: 1;
+}
+body.world-mine .mine-nav.open > button:not(#mineJumpPick) b {
+  display: inline;
+  font: 800 13px Nunito, sans-serif;
+}
+body.world-mine .mine-nav.open > button span {
+  width: 20px;
+  text-align: center;
+}
+body.world-mine .mine-hud:has(#mineDockToggle:not([hidden])) .mine-nav {
+  right: -154px;
+}
+
+/* ===== P1.2 cosmetics: the Looks list by domain ===== */
+.look-heading small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #a9a3d6;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.look-item button.look-buy-ask {
+  background: var(--gold);
+  color: #2a2040;
+  animation: lookAsk 0.9s ease-in-out infinite;
+}
+@keyframes lookAsk {
+  50% {
+    box-shadow: 0 0 0 4px rgba(255, 215, 122, 0.28);
+  }
+}
+
+/* ===== P1.2 UI feedback: answers you can feel, dosed ===== */
+/* a toast springs in instead of sliding flat */
+.toast.visible {
+  animation: toastPop 0.34s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+@keyframes toastPop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 14px) scale(0.92);
+  }
+  70% {
+    transform: translate(-50%, -2px) scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+/* buttons in panels, sheets and the dock give way under the finger */
+.modal-box button:not(:disabled),
+.building-sheet button:not(:disabled),
+.home-sheet button:not(:disabled),
+.action-dock button:not(:disabled),
+.mine-dock button:not(:disabled) {
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.modal-box button:not(:disabled):active,
+.building-sheet button:not(:disabled):active,
+.home-sheet button:not(:disabled):active,
+.action-dock button:not(:disabled):active,
+.mine-dock button:not(:disabled):active {
+  transform: scale(0.96);
+  filter: brightness(1.08);
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast.visible {
+    animation: none;
+  }
+}
+body.reduce-motion .toast.visible {
+  animation: none;
+}
+/* the open district list lies above the top stack; on short screens (landscape phones) it is two columns */
+body.world-shell .scene-bar.compact.menu-open {
+  z-index: 7;
+}
+@media (max-height: 520px) {
+  body.world-shell .scene-bar.compact.menu-open .district-nav:not([hidden]) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: min(400px, 100%);
+  }
+}
+
+/* ===== P1.3 Schiffs-Studio (the Kätzchen-Studio's layout; a wider, shorter stage for a ship) ===== */
+#shipStudioCanvas {
+  display: block;
+  width: 100%;
+  height: clamp(170px, 30dvh, 250px);
+}
+.ship-studio-models {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ship-studio-models::-webkit-scrollbar {
+  display: none;
+}
+.ship-studio-models .studio-char {
+  flex: 0 0 auto;
+  min-width: 84px;
+}
+.ship-studio-models .studio-char small {
+  display: block;
+  font-size: 10px;
+  opacity: 0.8;
+}
+.ship-studio-models .studio-char i {
+  font-style: normal;
+  font-size: 20px;
+}
+.ship-studio-box .studio-item canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 128 / 80;
+  border-radius: 10px;
+}
+.studio-entry.ship {
+  background: linear-gradient(90deg, #8fe3ff, #c4b3ff);
+}
+.ship-studio-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: 6px 0 2px;
+  padding: 4px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(143, 227, 255, 0.5);
+  background: rgba(29, 33, 80, 0.75);
+  color: #bfeeff;
+  font: 800 13px Nunito, sans-serif;
+}
+/* six models in one row that scrolls sideways; five slots in one row with compact labels */
+.modal-box .studio-chars.ship-studio-models {
+  display: flex;
+}
+.modal-box .ship-studio-models .studio-char i {
+  width: 32px;
+  height: 32px;
+  font-size: 17px;
+}
+/* P1.4: six slots (+ Geschoss): one row where 44 px fit, else two rows of three */
+.ship-studio-box .studio-slots {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+@media (max-width: 400px) {
+  .ship-studio-box .studio-slots {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.ship-studio-box .studio-slots button {
+  min-width: 0;
+  padding: 2px 2px;
+  font-size: 11px;
+  line-height: 1.1;
+}
+@media (max-width: 360px) {
+  .ship-studio-box .studio-slots button {
+    font-size: 9.5px;
+  }
+}
+.ship-studio-box .studio-slots {
+  gap: 4px;
+}
+/* a short landscape screen: a lower stage so the views and slots come sooner */
+@media (max-height: 520px) {
+  #shipStudioCanvas {
+    height: 130px;
+  }
+}
+/* the ship studio's stage carries the DNA line at the top: the preview tag sits at the bottom */
+.ship-studio-box .studio-tag {
+  top: auto;
+  bottom: 8px;
+}
+
+/* ===== P1.4 Cosmetics 2.0: the Boutique, the confirm dialog, the album, the reveal card ===== */
+.look-entries {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+.look-entries .studio-entry {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-height: 74px;
+  margin: 0;
+  padding: 8px 4px;
+  text-align: center;
+}
+.look-entries .studio-entry i {
+  font-size: 22px;
+}
+.look-entries .studio-entry span {
+  justify-items: center;
+}
+.look-entries .studio-entry b {
+  font-size: 12.5px;
+  line-height: 1.15;
+}
+.look-entries .studio-entry small {
+  font-size: 10px;
+  line-height: 1.2;
+}
+.look-entries .studio-entry.album {
+  background: linear-gradient(90deg, #8fe3ff, #c4a3ff);
+}
+.look-filter {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+.look-chips,
+.look-own,
+.collection-areas {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.look-chips::-webkit-scrollbar,
+.collection-areas::-webkit-scrollbar {
+  display: none;
+}
+.modal-box .look-chips button,
+.modal-box .look-own button,
+.modal-box .collection-areas button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #2a2c70;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.modal-box .look-chips button.active,
+.modal-box .look-own button.active,
+.modal-box .collection-areas button.active {
+  background: var(--gold);
+  color: #2a2040;
+}
+.look-own select {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #2a2c70;
+  color: var(--ink);
+  font: 800 12px Nunito, sans-serif;
+}
+.look-grid,
+.album-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 560px) {
+  .look-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .album-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.look-card {
+  --rar: #c9c3ee;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--rar) 14%, #1f215c), #1b1d52);
+  border: 1px solid color-mix(in srgb, var(--rar) 55%, transparent);
+  text-align: left;
+}
+.look-card.equipped {
+  box-shadow: 0 0 0 2px #ffd77a inset;
+}
+.look-card.rar-legendary,
+.look-card.rar-mythic {
+  box-shadow: 0 0 14px color-mix(in srgb, var(--rar) 35%, transparent);
+}
+.look-card.rar-legendary.equipped,
+.look-card.rar-mythic.equipped {
+  box-shadow: 0 0 0 2px #ffd77a inset, 0 0 14px color-mix(in srgb, var(--rar) 35%, transparent);
+}
+.look-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #141640;
+}
+.modal-box button.look-art {
+  min-height: 0;
+  background: #141640;
+}
+.look-art canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 192 / 112;
+}
+.look-rarity {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--rar, #c9c3ee);
+  color: #1b1640;
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+.look-state {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #0e1030cc;
+  color: var(--cyan);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 900;
+}
+.look-state.on {
+  color: #ffd77a;
+}
+.look-try {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #0e1030cc;
+  color: #e8e4fa;
+  font-size: 9.5px;
+  font-weight: 900;
+}
+.look-card > b {
+  font-size: 12.5px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.look-card > small {
+  color: #b6b1da;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+.look-src {
+  justify-self: start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ffffff14;
+  color: #e8e4fa;
+  font-size: 10.5px;
+  font-weight: 900;
+}
+.look-src.src-reward,
+.look-src.src-achievement {
+  background: #8ff0d42e;
+  color: var(--lime);
+}
+.look-src.src-currency {
+  background: #ffd77a26;
+  color: #ffe9a8;
+}
+.look-src.src-event {
+  background: #c4a3ff2e;
+  color: #e3d6ff;
+}
+.look-src.src-premium {
+  background: #ffffff10;
+  color: #a9a3d6;
+}
+.modal-box .look-card > button {
+  min-height: var(--tap-min, 44px);
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+.modal-box .look-card > button.secondary {
+  background: #ffffff14;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.modal-box .look-card > button:disabled {
+  opacity: 0.45;
+}
+.look-card .look-source {
+  color: #b6b1da;
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+.look-set .set-reward {
+  margin-top: 6px;
+  color: #ffe9a8;
+}
+.look-set.collection.complete {
+  border-color: #ffd77aaa;
+}
+/* the confirm dialog */
+.look-confirm-box {
+  --rar: #c9c3ee;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 16px 16px;
+}
+/* a short landscape screen: the picture beside the text, the buttons stay on screen */
+@media (max-height: 520px) {
+  .look-confirm-box {
+    width: min(560px, calc(100vw - 24px));
+    max-width: 560px;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 0 14px;
+    align-items: center;
+    padding: 14px 16px;
+    text-align: left;
+  }
+  .look-confirm-box > span,
+  .look-confirm-box > h2 {
+    grid-column: 1 / -1;
+  }
+  .look-confirm-box canvas {
+    grid-row: span 3;
+    margin: 4px 0;
+  }
+  .look-confirm-box .look-confirm-actions {
+    grid-column: 2;
+  }
+}
+.look-confirm-box > span {
+  color: var(--rar);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.look-confirm-box h2 {
+  font-size: 21px;
+}
+.look-confirm-box canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--rar) 60%, transparent);
+}
+.modal-box .look-confirm-text {
+  margin: 4px 0 8px;
+  font-size: 12px;
+}
+.look-confirm-price {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.look-confirm-price b {
+  color: #ffe9a8;
+  font-size: 20px;
+}
+.look-confirm-price small {
+  color: #b6b1da;
+  font-size: 11.5px;
+}
+.look-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.modal-box .look-confirm-actions button {
+  min-height: 48px;
+  border-radius: 14px;
+  font-weight: 900;
+}
+.modal-box .look-confirm-actions button.secondary {
+  background: #ffffff14;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+/* the album */
+.collection-box {
+  width: min(560px, calc(100vw - 24px));
+  max-width: 560px;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 14px;
+  text-align: left;
+}
+.collection-box > span,
+.collection-box > h2 {
+  display: block;
+  text-align: center;
+}
+.collection-profile {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0;
+  padding: 8px;
+  border-radius: 16px;
+  background: #ffffff0b;
+  border: 1px solid var(--line);
+}
+.collection-profile canvas {
+  width: 96px;
+  height: 96px;
+}
+.collection-profile b {
+  display: block;
+  font-size: 14px;
+}
+.collection-profile small {
+  display: block;
+  margin-top: 3px;
+  color: #b6b1da;
+  font-size: 11px;
+}
+.collection-profile .album-rarities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.album-rarities span {
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--rar);
+  color: var(--rar);
+  font-size: 10px;
+  font-weight: 900;
+}
+.album-bar {
+  display: block;
+  height: 8px;
+  margin: 4px 0;
+  border-radius: 999px;
+  background: #0e1030;
+  overflow: hidden;
+}
+.album-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8ff0d4, #ffd77a);
+}
+.collection-areas {
+  margin: 4px 0 8px;
+}
+.modal-box .album-tile {
+  --rar: #c9c3ee;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 5px;
+  border-radius: 12px;
+  background: #1b1d52;
+  border: 1px solid color-mix(in srgb, var(--rar) 55%, transparent);
+  color: var(--ink);
+  text-align: left;
+}
+.modal-box .album-tile.locked {
+  border-style: dashed;
+  color: #a9a3d6;
+}
+.modal-box .album-tile.picked {
+  box-shadow: 0 0 0 2px #ffd77a inset;
+}
+.album-tile canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 128 / 80;
+  border-radius: 8px;
+}
+.album-tile b {
+  font-size: 11px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.album-detail {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--rar) 16%, #1f215c), #1b1d52);
+  border: 1px solid color-mix(in srgb, var(--rar) 60%, transparent);
+}
+.album-detail canvas {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+.album-detail > div {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding-top: 20px;
+}
+.album-detail .look-rarity {
+  top: 0;
+  left: 0;
+}
+.album-detail b {
+  font-size: 15px;
+}
+.album-detail small {
+  color: #b6b1da;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.album-detail .album-how {
+  color: var(--lime);
+  font-weight: 800;
+}
+.modal-box .album-detail > button {
+  min-height: 46px;
+  border-radius: 12px;
+  font-weight: 900;
+}
+.album-set {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 16px;
+  background: #ffffff0b;
+  border: 1px solid var(--line);
+}
+.album-set.complete {
+  border-color: #ffd77aaa;
+}
+.album-set > b {
+  font-size: 14px;
+}
+.album-set > small {
+  color: #b6b1da;
+  font-size: 11px;
+}
+.album-reward {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+.album-reward small {
+  color: #ffe9a8;
+  font-size: 11px;
+}
+/* the reveal card: over the scene below the top bar (never over the action dock or the tabs), no backdrop – it never
+   blocks the game */
+.cosmetic-reveal {
+  --rar: #c4a3ff;
+  position: fixed;
+  z-index: 19;
+  left: 50%;
+  top: calc(168px + env(safe-area-inset-top, 0px));
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  width: min(380px, calc(100vw - 24px));
+  padding: 8px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--rar) 22%, #1f215c), #1b1d52);
+  border: 1px solid var(--rar);
+  box-shadow: 0 10px 30px #0008, 0 0 18px color-mix(in srgb, var(--rar) 40%, transparent);
+  animation: crIn 0.35s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+.cosmetic-reveal.hidden {
+  display: none;
+}
+@keyframes crIn {
+  from {
+    transform: translate(-50%, 30px);
+    opacity: 0;
+  }
+}
+.cr-stage {
+  position: relative;
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 66px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--rar) 35%, transparent), #141640);
+}
+.cr-stage canvas {
+  width: 112px;
+  height: 66px;
+}
+.cr-stage .rv-orb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff, var(--rv-color, #c4a3ff) 45%, rgba(40, 30, 90, 0.9) 75%);
+  box-shadow: 0 0 20px var(--rv-color, #c4a3ff);
+}
+.cr-stage.rv-show .rv-orb {
+  display: none;
+}
+.cr-stage .rv-skip {
+  min-height: 30px;
+  right: 2px;
+  bottom: 2px;
+  padding: 2px 6px;
+  font-size: 10px;
+}
+.cr-stage .rv-label {
+  display: none;
+}
+.cr-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.cr-text span {
+  color: var(--rar);
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.cr-text b {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.cr-text small {
+  color: #b6b1da;
+  font-size: 11px;
+}
+.cr-actions {
+  display: flex;
+  gap: 6px;
+}
+.cr-actions button {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--lime);
+  color: #1b1640;
+  font-weight: 900;
+}
+.cr-actions button.secondary {
+  min-width: 44px;
+  background: #ffffff14;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.cr-actions button.hidden {
+  display: none;
+}
+body.reduce-motion .cosmetic-reveal {
+  animation: none;
+}
+/* a short landscape screen: a smaller card at the top left of the scene (the tabs are on the left, the action dock on the
+   right) */
+@media (max-height: 520px) {
+  .cosmetic-reveal {
+    top: calc(58px + env(safe-area-inset-top, 0px));
+    left: calc(70px + env(safe-area-inset-left, 0px));
+    right: auto;
+    transform: none;
+    width: min(330px, 40vw);
+    animation: crFade 0.3s ease-out;
+  }
+}
+@keyframes crFade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ===== P1.5 combat control: the control row in the fight, the FEUER button, the "Steuerung" section in the prep ===== */
+.exp-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.exp-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(20, 18, 50, 0.7);
+  color: #e8e4fa;
+  font: 800 11.5px Nunito, sans-serif;
+}
+button.exp-chip {
+  min-height: 44px;
+  border: 1px solid rgba(196, 179, 255, 0.4);
+}
+button.exp-chip.on {
+  border-color: var(--lime);
+  color: var(--lime);
+}
+.exp-ability.exp-fire {
+  background: linear-gradient(180deg, #ff9a6b, #e8604a);
+  color: #2a1020;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.exp-ability.exp-fire.on {
+  box-shadow: 0 0 0 3px #ffd77a inset, 0 0 14px #ff9a6b;
+  transform: scale(0.97);
+}
+.exp-control .exp-note {
+  margin: 0 0 8px;
+  color: #b6b1da;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.exp-switch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  margin: 0 0 6px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #ffffff0b;
+  color: var(--ink);
+  text-align: left;
+}
+.exp-switch b {
+  font-size: 13.5px;
+}
+.exp-switch small {
+  grid-column: 1;
+  color: #b6b1da;
+  font-size: 11px;
+}
+.exp-switch i {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-width: 46px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #ffffff14;
+  font: 900 11px Nunito, sans-serif;
+  font-style: normal;
+  text-align: center;
+}
+.exp-switch.on {
+  border-color: #8ff0d4aa;
+}
+.exp-switch.on i {
+  background: var(--lime);
+  color: #1b1640;
+}
+.exp-switch:disabled {
+  opacity: 0.6;
+}
+.exp-next-steps {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.exp-next-steps li {
+  display: grid;
+  gap: 1px;
+  padding: 6px 0;
+  border-top: 1px dashed var(--line);
+}
+.exp-next-steps b {
+  font-size: 12px;
+}
+.exp-next-steps small {
+  color: #b6b1da;
+  font-size: 11px;
+}
+
+/* P1.5: the combat coach (Boba's training card on top of the field; touches pass through to the field except its
+   buttons) and the guardian's line on the reveal card */
+.combat-coach {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: start;
+  width: min(360px, calc(100% - 16px));
+  padding: 8px 10px;
+  border: 1px solid rgba(143, 240, 212, 0.45);
+  border-radius: 14px;
+  background: rgba(16, 15, 44, 0.86);
+  color: #f3f0ff;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.combat-coach img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(143, 240, 212, 0.18);
+}
+.combat-coach small {
+  display: block;
+  color: #8ff0d4;
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+.combat-coach b {
+  font-size: 14px;
+}
+.combat-coach p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.combat-coach .coach-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.combat-coach button {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 900;
+  pointer-events: auto;
+}
+.combat-coach button.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #c9c3ee;
+}
+@media (max-height: 520px) {
+  .combat-coach {
+    top: 4px;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    width: min(560px, calc(100% - 12px));
+    padding: 6px 8px;
+  }
+  .combat-coach img {
+    width: 32px;
+    height: 32px;
+  }
+  .combat-coach p {
+    font-size: 11px;
+  }
+  .combat-coach .coach-actions {
+    grid-column: auto;
+    flex-direction: column;
+  }
+  .combat-coach button {
+    min-height: 44px;
+  }
+}
+.cr-text small.cr-quote {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #ffe9a8;
+  font-style: italic;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.exp-tutorial-again {
+  justify-self: start;
+  min-height: 44px;
+  margin-top: 6px;
+}
+.combat-coach button:not(.secondary) {
+  background: var(--lime);
+  color: #12122e;
+}
+/* while Boba coaches, the steering and enemy hints step aside (the card says it) */
+.exp-fight.coaching .exp-role,
+.exp-fight.coaching .exp-steer-row {
+  visibility: hidden;
+}
+/* FEUER joins the abilities in one row */
+.exp-abilities.with-fire {
+  grid-template-columns: 1.25fr 1fr 1fr;
+}
+@media (max-width: 360px) {
+  .exp-abilities.with-fire .exp-ability {
+    column-gap: 4px;
+    padding-left: 8px;
+    padding-right: 6px;
+  }
+}
+/* a short landscape screen: the fight's header and footer each in one line, so the field keeps its height */
+@media (max-height: 520px) {
+  .exp-top {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 44px 44px;
+    grid-template-areas: 'title hp ctl pause' 'title phase ctl pause';
+    gap: 0 10px;
+    padding: 4px 10px;
+  }
+  .exp-top .exp-title {
+    grid-area: title;
+  }
+  .exp-top .exp-hp {
+    grid-area: hp;
+  }
+  .exp-top .exp-phase {
+    grid-area: phase;
+  }
+  .exp-top .exp-pause {
+    grid-area: pause;
+  }
+  .exp-top .exp-fire-toggle {
+    grid-area: ctl;
+  }
+  .exp-bottom {
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 2fr);
+    align-items: center;
+    gap: 10px;
+    padding: 4px 10px 6px;
+  }
+  .exp-bottom .exp-abilities {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* the Auto-Fire switch beside the pause button (AUTO / HAND); a short landscape screen has its own grid above */
+@media (min-height: 521px) {
+  .exp-top {
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+  }
+}
+.exp-fire-toggle {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(196, 179, 255, 0.3);
+  color: #f2eeff;
+  font: 900 16px Nunito, sans-serif;
+  line-height: 1;
+}
+.exp-fire-toggle small {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+.exp-fire-toggle.on {
+  border-color: var(--lime);
+  color: var(--lime);
+}
+.exp-aim {
+  color: #8fe3ff;
+  font-weight: 800;
 }

@@ -10,7 +10,11 @@ const FORGE_LOOKS = {
   'glider-blossom': { body: ['#c4567e', '#f29ab9'], trim: '#fff0f6', glow: '#ffc4dc', dots: '#ffffff' },
   'impact-gold': { color: '#ffd76a', core: '#fff6d6' },
   'impact-aurora': { color: '#7af0e0', core: '#e8d6ff' },
-  'engine-comet': { color: '#bfe6ff', core: '#ffffff' }
+  'impact-frost': { color: '#bff4ff', core: '#ffffff' },
+  'engine-comet': { color: '#bfe6ff', core: '#ffffff' },
+  // P1.4 (shapes: scenes/cosmetic-art.js)
+  'engine-crystal': { color: '#9fe8ff', core: '#ffffff' },
+  'engine-clockwork': { color: '#ffd77a', core: '#fff3c4' }
 };
 window.SpaceKittensForge = { LOOKS: FORGE_LOOKS };
 
@@ -47,6 +51,8 @@ function forgePreview(canvas, id) {
     look = FORGE_LOOKS[id],
     w = canvas.width,
     h = canvas.height;
+  // P1.5: looks with a preview on the real object (a building, a vehicle, a decoration, a shot) use the shop's one
+  if (['stall', 'shot', 'vehicle', 'depot', 'decor'].includes(item?.slot) && typeof drawLookPreview === 'function') return drawLookPreview(canvas, id);
   ctx.clearRect(0, 0, w, h);
   const bg = ctx.createLinearGradient(0, 0, 0, h);
   bg.addColorStop(0, '#1d1f5c');
@@ -216,7 +222,7 @@ const combatViewBeforeForge = window.NebulaView.combat;
 window.NebulaView.combat = () => {
   const view = combatViewBeforeForge(),
     eq = state.meta?.equipped || {};
-  return { ...view, cosmeticGlider: eq.glider || null, cosmeticImpact: eq.impact || null, cosmeticEngine: eq.engine || null };
+  return { ...view, cosmeticGlider: eq.glider || null, cosmeticImpact: eq.impact || null, cosmeticEngine: eq.engine || null, cosmeticMuzzle: eq.muzzle || null, cosmeticShot: eq.shot || null };
 };
 
 // A short glow pulse on something new (a forged look, a fused item); static glow with reduced motion.

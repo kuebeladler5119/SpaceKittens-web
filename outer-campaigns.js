@@ -248,10 +248,38 @@ function arenaGuardianMove(f, def, dt, sx, ax, sy, ay) {
 //          nothing gets through his plates and a running Salve is blown out
 //   cool (4.5 s): the plates stand open — 175 %; then the pressure starts at 0 again
 const EB_ARENA = { rate: 11, rate2: 14, salvoPush: 3, warn: 2, blast: 1.4, cool: 4.5, shield: 0.4, open: 1.75, emberEvery: 2, emberEvery2: 1.6, steamShots: 7, steamSpeed: 44, steamDamage: 1.5, rainEvery: 3, rainFlight: 1.25, rainRadius: 8, rainDamage: 0.9 };
+// P1.4 — Glockenschlag (Emberbell's signature, every second time the pressure is full, instead of the steam blast):
+//   prep (0.5 s)  he swings his bell back (event 'sig-prep')
+//   warn (2 s)    the rings and their gaps are shown at the ship's line: ring 1 has its gap on the far half of the field,
+//                 ring 2 on the other one (phase 2: a third ring, back again) – the ship has to move twice
+//   attack        each ring is a curtain of heat shots that spreads from the bell to the whole height of the field; a ring
+//                 hurts at most once
+//   counter       steer into each gap in turn, or hold the Schildpuls
+//   recover       the plates stand open (the cool phase, 175 %)
+const EB_BELL = { prep: 0.5, warn: 2, ringGap: 1.25, ringGap2: 1.35, speed: 58, step: 6, r: 3.2, gap: 30, damage: 1.3 };
+function emberbellBellGaps(a, f, n) {
+  const first = a.ship.y > ARENA.H / 2 ? 27 : 63,
+    out = [];
+  for (let i = 0; i < n; i++) {
+    const base = i % 2 ? ARENA.H - first : first;
+    out.push(Math.max(EB_BELL.gap / 2 + 4, Math.min(ARENA.H - EB_BELL.gap / 2 - 4, base + (arenaRand(a) - 0.5) * 8)));
+  }
+  return out;
+}
+// one ring: heat shots aimed so that they reach the ship's line at every height except the gap
+function emberbellRing(a, f, gapY, ring) {
+  const C = EB_BELL;
+  for (let y = 4; y <= ARENA.H - 4; y += C.step) {
+    if (Math.abs(y - gapY) < C.gap / 2) continue;
+    const ang = Math.atan2(y - f.y, a.ship.x - f.x);
+    arenaSigShot(a, f, { kind: 'heat-ring', wall: ring, x: f.x + Math.cos(ang) * f.r, y: f.y + Math.sin(ang) * f.r, vx: Math.cos(ang) * C.speed, vy: Math.sin(ang) * C.speed, r: C.r, damage: f.atk * C.damage });
+  }
+}
 function emberbellArenaStep(a, f, def, dt) {
   const C = EB_ARENA;
-  if (f.ebPhase === undefined) Object.assign(f, { ebPhase: 'build', ebAt: f.t, pressure: 0, nextEmber: 1.5, nextRain: 2 });
-  arenaGuardianMove(f, def, dt, 0.8, 4, 0.45, 24);
+  if (f.ebPhase === undefined) Object.assign(f, { ebPhase: 'build', ebAt: f.t, pressure: 0, nextEmber: 1.5, nextRain: 2, ebFull: 0 });
+  // he stands still while he rings (the rings start from where the warning showed them)
+  if (!f.sig) arenaGuardianMove(f, def, dt, 0.8, 4, 0.45, 24);
   const since = f.t - f.ebAt;
   if (f.ebPhase === 'build') {
     f.pressure = Math.min(100, f.pressure + (f.phase2 ? C.rate2 : C.rate) * dt);
@@ -263,7 +291,23 @@ function emberbellArenaStep(a, f, def, dt) {
       f.nextRain = f.t + C.rainEvery;
       for (const offset of [-10, 10]) arenaFoeShot(a, f, def, { kind: 'magma', lob: { flight: C.rainFlight, radius: C.rainRadius }, offset, damage: f.atk * C.rainDamage });
     }
-    if (f.pressure >= 100) emberbellEnter(a, f, 'warn');
+    if (f.pressure >= 100) {
+      f.ebFull = (f.ebFull || 0) + 1;
+      emberbellEnter(a, f, f.ebFull % 2 === 0 ? 'bellprep' : 'warn');
+    }
+  } else if (f.ebPhase === 'bellprep') {
+    if (since >= EB_BELL.prep) emberbellEnter(a, f, 'bellwarn');
+  } else if (f.ebPhase === 'bellwarn') {
+    if (since >= EB_BELL.warn) emberbellEnter(a, f, 'bell');
+  } else if (f.ebPhase === 'bell') {
+    // the rings, one after the other; then the cool phase is his recovery
+    const ringGap = f.phase2 ? EB_BELL.ringGap2 : EB_BELL.ringGap;
+    while (f.ebRing < f.ebGaps.length && since >= f.ebRing * ringGap) {
+      emberbellRing(a, f, f.ebGaps[f.ebRing], a.nextId);
+      arenaEvent(a, { type: 'foe-fire', id: f.id, kind: 'heat-ring', ring: f.ebRing });
+      f.ebRing++;
+    }
+    if (f.ebRing >= f.ebGaps.length && since >= (f.ebGaps.length - 1) * ringGap + 0.3) emberbellEnter(a, f, 'cool');
   } else if (f.ebPhase === 'warn') {
     if (since >= C.warn) emberbellEnter(a, f, 'blast');
   } else if (f.ebPhase === 'blast') {
@@ -276,7 +320,22 @@ function emberbellEnter(a, f, phase) {
   const C = EB_ARENA;
   f.ebPhase = phase;
   f.ebAt = f.t;
-  if (phase === 'warn') arenaEvent(a, { type: 'telegraph', id: f.id, steam: true, x0: f.x, y0: f.y, x1: a.ship.x, y1: a.ship.y, until: a.t + C.warn });
+  if (phase === 'bellprep') {
+    f.sig = 'bell';
+    arenaEvent(a, { type: 'sig-prep', id: f.id, sig: 'bell' });
+  } else if (phase === 'bellwarn') {
+    const B = EB_BELL,
+      gaps = (f.ebGaps = emberbellBellGaps(a, f, f.phase2 ? 3 : 2)),
+      ringGap = f.phase2 ? B.ringGap2 : B.ringGap,
+      // when ring i has passed the ship at its gap (the shots beside the gap fly a little longer than the middle ones)
+      passed = i => a.t + B.warn + i * ringGap + (Math.max(Math.hypot(a.ship.x - f.x, gaps[i] + B.gap / 2 - f.y), Math.hypot(a.ship.x - f.x, gaps[i] - B.gap / 2 - f.y)) - f.r) / B.speed + 0.15;
+    f.ebRing = 0;
+    arenaEvent(a, { type: 'telegraph', id: f.id, bell: true, gaps: gaps.slice(), gap: B.gap, x0: f.x, y0: f.y, x1: a.ship.x, y1: gaps[0], until: a.t + B.warn });
+    // the self-steering ship: gap 1 until ring 1 has passed, then gap 2, …
+    let safe = null;
+    for (let i = gaps.length - 1; i >= 0; i--) safe = { y: gaps[i], until: passed(i), next: safe };
+    a.sigSafe = safe;
+  } else if (phase === 'warn') arenaEvent(a, { type: 'telegraph', id: f.id, steam: true, x0: f.x, y0: f.y, x1: a.ship.x, y1: a.ship.y, until: a.t + C.warn });
   else if (phase === 'blast') {
     if (a.ship.salvoUntil > a.t) {
       a.ship.salvoUntil = a.t;
@@ -287,7 +346,11 @@ function emberbellEnter(a, f, phase) {
       a.foeShots.push({ id: a.nextId++, kind: 'steam', from: f.id, x: f.x - f.r, y: 8 + (i / (C.steamShots - 1)) * (ARENA.H - 16), vx: -C.steamSpeed, vy: 0, r: 4, damage: f.atk * C.steamDamage, age: 0 });
     }
     arenaEvent(a, { type: 'steam', id: f.id });
-  } else if (phase === 'cool') arenaEvent(a, { type: 'boss-open', id: f.id, until: a.t + C.cool });
+  } else if (phase === 'cool') {
+    const recover = f.sig === 'bell';
+    f.sig = null;
+    arenaEvent(a, { type: 'boss-open', id: f.id, until: a.t + C.cool, ...(recover ? { recover: true } : {}) });
+  }
   else {
     f.pressure = 0;
     arenaEvent(a, { type: 'boss-close', id: f.id });
@@ -298,6 +361,8 @@ ARENA_BOSS_DAMAGE.emberbell = (a, f, factor, { salvo }) => {
   if (f.ebPhase === 'cool') return factor * EB_ARENA.open;
   a.stats.reduced++;
   if (f.ebPhase === 'blast') return 0;
+  // the ringing bell: his heat shield holds as in the build-up (no pressure from a Salve)
+  if (f.sig === 'bell') return factor * EB_ARENA.shield;
   if (salvo && f.ebPhase === 'build') f.pressure = Math.min(100, f.pressure + EB_ARENA.salvoPush);
   return factor * EB_ARENA.shield;
 };
@@ -310,6 +375,14 @@ ARENA_BOSS_DAMAGE.emberbell = (a, f, factor, { salvo }) => {
 //   Taktbruch: a Salve hit in the window or while open breaks his rhythm — the housing stays open for four beats
 //   (once per cycle).
 const CW_ARENA = { beat: 0.9, beat2: 0.72, beats: 8, bolts: [0, 2], crate: 1, window: 3, open: 4, openBeats: 2, laserWarn: 6, laser: 7, shield: 0.3, openFactor: 1.8, breakBeats: 4, laserDamage: 2, laserSpeed: 120, crateDamage: 1.2 };
+// P1.4 — Fließbandfalle (Cogsworth's signature, every second Taktband cycle, instead of the window and the laser):
+//   beat 3 prep    he switches the belt over (event 'sig-prep'; his beat lamps run as a chase)
+//   beats 4–6 warn the laser lane is marked at the ship's height, and the conveyor starts: it carries the ship (and a
+//                  resting finger) toward the lane – the ship has to be steered out, against the belt
+//   beat 7 attack  a wide release laser along the lane (three beams, it hurts at most once)
+//   counter        steer out of the lane (the ship is faster than the belt), or hold the Schildpuls
+//   recover        his housing is open for two beats (180 %; a Salve hit breaks his rhythm as usual)
+const CW_TRAP = { half: 15, reach: 30, belt: 14, belt2: 18, speed: 140, r: 4.4, spread: 7, damage: 2 };
 function cwBeatLen(f) {
   return f.phase2 ? CW_ARENA.beat2 : CW_ARENA.beat;
 }
@@ -322,22 +395,25 @@ function cogsworthArenaStep(a, f, def, dt) {
     f.cwNext = f.t + len;
     f.cwBeat = (f.cwBeat + 1) % C.beats;
     f.cwCount = (f.cwCount || 0) + 1; // beats so far (the conveyor advances one step per beat)
-    const b = f.cwBeat;
+    const b = f.cwBeat,
+      // P1.4: every second cycle is the Fließbandfalle
+      trap = Math.floor((f.cwCount - 1) / C.beats) % 2 === 1;
     if (b === 0) f.broke = false;
     arenaEvent(a, { type: 'beat', id: f.id, beat: b });
+    if (trap) cogsworthTrapBeat(a, f, b, len);
     if (b === C.bolts[0]) for (const spread of [-0.07, 0.07]) arenaFoeShot(a, f, def, { kind: 'cog-bolt', spread });
     else if (C.bolts.includes(b)) arenaFoeShot(a, f, def, { kind: 'cog-bolt' });
     if (b === C.crate && f.phase2) arenaFoeShot(a, f, def, { kind: 'crate', lob: { flight: 1.3, radius: 7 }, damage: f.atk * C.crateDamage });
-    if (b === C.window) arenaEvent(a, { type: 'boss-warn', id: f.id, kind: 'window' });
-    if (b === C.open && f.t >= f.openUntil) {
+    if (b === C.window && !trap) arenaEvent(a, { type: 'boss-warn', id: f.id, kind: 'window' });
+    if (b === C.open && !trap && f.t >= f.openUntil) {
       f.openUntil = f.t + C.openBeats * len;
       arenaEvent(a, { type: 'boss-open', id: f.id, until: a.t + C.openBeats * len });
     }
-    if (b === C.laserWarn) {
+    if (b === C.laserWarn && !trap) {
       f.aimY = a.ship.y;
       arenaEvent(a, { type: 'telegraph', id: f.id, laser: true, x0: f.x, y0: f.aimY, x1: a.ship.x, y1: f.aimY, until: a.t + len });
     }
-    if (b === C.laser) {
+    if (b === C.laser && !trap) {
       if (a.foeShots.length >= ARENA.MAX_FOE_SHOTS) a.foeShots.shift();
       a.foeShots.push({ id: a.nextId++, kind: 'release-laser', from: f.id, x: f.x - f.r, y: f.aimY ?? a.ship.y, vx: -C.laserSpeed, vy: 0, r: 3.6, damage: f.atk * C.laserDamage, age: 0 });
       arenaEvent(a, { type: 'foe-fire', id: f.id, kind: 'release-laser' });
@@ -345,9 +421,40 @@ function cogsworthArenaStep(a, f, def, dt) {
   }
   arenaGuardianPhase2(a, f);
 }
+function cogsworthTrapBeat(a, f, b, len) {
+  const T = CW_TRAP,
+    ship = a.ship;
+  if (b === CW_ARENA.window) {
+    f.sig = 'belt';
+    arenaEvent(a, { type: 'sig-prep', id: f.id, sig: 'belt' });
+  } else if (b === CW_ARENA.open) {
+    // the lane where the ship is now; the belt pulls toward its middle until the laser has passed
+    const laneY = Math.max(T.half + 2, Math.min(ARENA.H - T.half - 2, ship.y)),
+      fire = a.t + 3 * len,
+      until = fire + (f.x - f.r - ship.x) / T.speed + 0.3;
+    f.trapY = laneY;
+    a.belt = { y: laneY, reach: T.reach, speed: f.phase2 ? T.belt2 : T.belt, until };
+    arenaEvent(a, { type: 'telegraph', id: f.id, belt: true, laneY, half: T.half, reach: T.reach, x0: f.x, y0: f.y, x1: ship.x, y1: laneY, until: fire });
+    // the self-steering ship: out of the lane on the nearer side (where there is room)
+    const out = T.half + ARENA.SHIP_R + 6,
+      up = laneY - out,
+      down = laneY + out,
+      side = ship.y < laneY ? (up >= 8 ? up : down) : down <= ARENA.H - 8 ? down : up;
+    a.sigSafe = { y: side, until };
+  } else if (b === CW_ARENA.laser) {
+    const wall = a.nextId;
+    for (const dy of [-T.spread, 0, T.spread]) arenaSigShot(a, f, { kind: 'trap-laser', wall, x: f.x - f.r, y: f.trapY + dy, vx: -T.speed, vy: 0, r: T.r, damage: f.atk * T.damage });
+    arenaEvent(a, { type: 'foe-fire', id: f.id, kind: 'trap-laser' });
+    // the recovery: the housing stands open for two beats
+    f.sig = null;
+    f.openUntil = f.t + CW_ARENA.openBeats * len;
+    arenaEvent(a, { type: 'boss-open', id: f.id, until: a.t + CW_ARENA.openBeats * len, recover: true });
+  }
+}
 function cogsworthPhase(f) {
   if (f.t < f.openUntil) return f.broke ? 'broken' : 'open';
-  return f.cwBeat === CW_ARENA.window ? 'window' : 'inspect';
+  // (in a Fließbandfalle cycle beat 3 is the belt's preparation, not the inspection window)
+  return f.cwBeat === CW_ARENA.window && f.sig !== 'belt' ? 'window' : 'inspect';
 }
 ARENA_BOSS_STEPS.cogsworth = cogsworthArenaStep;
 ARENA_BOSS_DAMAGE.cogsworth = (a, f, factor, { salvo }) => {
@@ -370,6 +477,21 @@ ARENA_BOSS_DAMAGE.cogsworth = (a, f, factor, { salvo }) => {
 //   Every living root heals her 1 % every 2 s (a green line from the root) — the ship's gun can cut them, the player
 //   decides with a tap whether to burn her bloom or her roots first.
 const PG_ARENA = { length: 10, length2: 8.2, thorns: [0.08, 0.22, 0.36], telegraph: 0.45, burst: 0.6, bloom: [0.55, 0.85], burstShots: 7, burstSpread: 0.15, burstSpeed: 38, burstDamage: 1.1, roots: 0.86, rootCount: 2, rootCount2: 3, rootMax: 4, rootHp: 0.035, heal: 0.01, healEvery: 2, bud: 0.3, budSalvo: 0.9, open: 1.5 };
+// P1.4 — Blütenpfad (Petalguard's signature, every second bloom cycle, instead of the pollen fan):
+//   prep (0.36)   her petals fold and turn (event 'sig-prep')
+//   warn (0.40)   the calm path is shown: it starts where the ship is and drifts to the other side of the field
+//   attack (0.55) eight columns of a petal storm across the whole height; each leaves a gap where the path will be when it
+//                 arrives – the storm hurts at most once
+//   counter       follow the path (it moves slowly), or hold the Schildpuls
+//   recover       her bloom opens after the storm (150 %)
+const PG_PATH = { prep: 0.36, warn: 0.4, storm: 0.55, columns: 8, every: 0.3, speed: 50, step: 11, r: 4.6, gap: 30, damage: 0.9, bloom: [0.8, 0.96] };
+function petalguardStormColumn(a, f, gapY, wall) {
+  const C = PG_PATH;
+  for (let y = 6; y <= ARENA.H - 5; y += C.step) {
+    if (Math.abs(y - gapY) < C.gap / 2) continue;
+    arenaSigShot(a, f, { kind: 'petal-storm', wall, x: f.x - f.r, y, vx: -C.speed, vy: 0, r: C.r, damage: f.atk * C.damage });
+  }
+}
 function petalguardArenaStep(a, f, def, dt) {
   const C = PG_ARENA,
     cyc = f.phase2 ? C.length2 : C.length,
@@ -382,16 +504,20 @@ function petalguardArenaStep(a, f, def, dt) {
     f.cycle = n;
     f.fired = 0;
   }
-  const once = (bit, at) => ct >= at && !(f.fired & bit) && (f.fired |= bit);
+  const once = (bit, at) => ct >= at && !(f.fired & bit) && (f.fired |= bit),
+    // P1.4: every second cycle is the Blütenpfad (two thorn volleys instead of three, no pollen fan)
+    path = n % 2 === 1;
+  if (path) petalguardPathStep(a, f, cyc, ct, once);
   C.thorns.forEach((at, i) => {
+    if (path && i === 2) return;
     if (!once(1 << i, at)) return;
     for (const spread of [-0.12, 0, 0.12]) arenaFoeShot(a, f, def, { kind: 'thorn-shot', spread, speed: 72, r: 1.4 });
   });
-  if (once(16, C.telegraph)) {
+  if (!path && once(16, C.telegraph)) {
     f.aimY = ship.y;
     arenaEvent(a, { type: 'telegraph', id: f.id, pollen: true, x0: f.x, y0: f.y, x1: ship.x, y1: ship.y, until: a.t + (C.burst - C.telegraph) * cyc });
   }
-  if (once(32, C.burst)) {
+  if (!path && once(32, C.burst)) {
     const base = Math.atan2((f.aimY ?? ship.y) - f.y, ship.x - f.x);
     for (let i = 0; i < C.burstShots; i++) {
       const ang = base + (i - (C.burstShots - 1) / 2) * C.burstSpread;
@@ -400,10 +526,11 @@ function petalguardArenaStep(a, f, def, dt) {
     }
     arenaEvent(a, { type: 'foe-fire', id: f.id, kind: 'pollen-orb' });
   }
-  const open = ct >= C.bloom[0] && ct < C.bloom[1];
+  const bloom = path ? PG_PATH.bloom : C.bloom,
+    open = ct >= bloom[0] && ct < bloom[1];
   if (open !== f.bloomOpen) {
     f.bloomOpen = open;
-    arenaEvent(a, { type: open ? 'boss-open' : 'boss-close', id: f.id, until: a.t + (C.bloom[1] - ct) * cyc });
+    arenaEvent(a, { type: open ? 'boss-open' : 'boss-close', id: f.id, until: a.t + (bloom[1] - ct) * cyc, ...(open && path ? { recover: true } : {}) });
   }
   if (once(64, C.roots)) {
     const standing = a.foes.filter(o => o.kind === 'root' && o.hp > 0).length,
@@ -422,6 +549,36 @@ function petalguardArenaStep(a, f, def, dt) {
     }
   }
   arenaGuardianPhase2(a, f);
+}
+function petalguardPathStep(a, f, cyc, ct, once) {
+  const C = PG_PATH,
+    ship = a.ship;
+  if (once(128, C.prep)) {
+    f.sig = 'path';
+    arenaEvent(a, { type: 'sig-prep', id: f.id, sig: 'path' });
+  }
+  if (once(256, C.warn)) {
+    const travel = (f.x - f.r - ship.x) / C.speed,
+      start = a.t + (C.storm - C.warn) * cyc,
+      y0 = Math.max(22, Math.min(ARENA.H - 22, ship.y)),
+      p = { y0, y1: y0 > ARENA.H / 2 ? 22 : ARENA.H - 22, a0: start + travel, a1: start + (C.columns - 1) * C.every + travel };
+    f.storm = { path: p, next: start, i: 0, wall: 'storm' + a.nextId };
+    arenaEvent(a, { type: 'telegraph', id: f.id, path: { ...p }, gap: C.gap, x0: f.x, y0: f.y, x1: ship.x, y1: y0, until: p.a1 });
+    a.sigSafe = { path: p, until: p.a1 + 0.4 };
+  }
+  // the storm: one column every 0.3 s, each with its gap where the path will be when it arrives
+  const s = f.storm;
+  if (s && s.i < C.columns && a.t >= s.next) {
+    const travel = (f.x - f.r - ship.x) / C.speed;
+    petalguardStormColumn(a, f, arenaPathY(s.path, s.next + travel), s.wall);
+    if (s.i === 0) arenaEvent(a, { type: 'foe-fire', id: f.id, kind: 'petal-storm' });
+    s.i++;
+    s.next += C.every;
+    if (s.i >= C.columns) {
+      f.storm = null;
+      f.sig = null;
+    }
+  }
 }
 // one root node in front of her (spawned in place: it neither moves nor shoots)
 function petalguardRoot(a, boss, i, n) {

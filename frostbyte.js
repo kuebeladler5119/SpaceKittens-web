@@ -305,15 +305,36 @@ renderObjective = function () {
         ? ['❄', 'Frostquarz-Bohrer bauen', 'Glacies ist eingefroren (−20 % Förderung). Der Bohrer liefert Frostquarz – danach baust du die Thermalwerkstatt.', 'BAUEN ›', 'frostDrill']
         : ['♨', 'Thermalwerkstatt bauen', 'Glacies ist eingefroren (−20 % Förderung). Aus Frostquarz und Rohkristallen entstehen Thermalzellen.', 'BAUEN ›', 'thermal']
       : fb.stage === 'heating'
-        ? ['♨', 'Wärmenetz ' + fb.heat + ' / ' + HEAT_CELLS_NEEDED, 'Fertige Thermalzellen und speise sie an der Thermalwerkstatt ein.', 'WERKSTATT ›', 'thermal']
+        ? ['♨', 'Wärmenetz ' + fb.heat + ' / ' + HEAT_CELLS_NEEDED, ...heatGoalStep()]
         : ['🔧', 'Frostbyte reparieren', 'Er ist besiegt, aber zittert. Repariere ihn im Abenteuer-Tab.', 'ABENTEUER ›', ''];
   $('objectiveIcon').textContent = goal[0];
   $('objectiveTitle').textContent = goal[1];
   $('objectiveText').textContent = goal[2];
   $('objectiveAction').textContent = goal[3];
   card.dataset.screen = goal[4] ? 'home' : 'battle';
-  card.dataset.sheet = goal[4] === 'frostDrill' && colonyAt().industry.frostDrill > 0 ? 'thermal' : goal[4];
+  card.dataset.sheet = goal[4] === 'frostDrill' && fb.stage === 'frozen' && colonyAt().industry.frostDrill > 0 ? 'thermal' : goal[4];
 };
+// R1: the heat goal names the step that is missing right now and opens its building (guided-player audit, R1-11 in
+// docs/release-r1/BUG_TRIAGE.md). Before, it only said "make cells and feed them": a cell needs 4 Frostquarz from the
+// drill and 10 raw crystals in the depot, and that was explained nowhere outside a failed tap.
+function heatGoalStep() {
+  const colony = colonyAt(),
+    depot = state.planetOps.storage[state.activePlanet] || 0;
+  if (colony.stock.cells >= 1) return ['Eine Thermalzelle ist fertig: speise sie an der Thermalwerkstatt ein (1 ZELLE EINSPEISEN).', 'WERKSTATT ›', 'thermal'];
+  if (colony.stock.frost < FROST_PER_CELL && !isAutomated('frostDrill'))
+    return ['Eine Zelle braucht ' + FROST_PER_CELL + ' Frostquarz: bau ihn am Frostquarz-Bohrer ab (FROSTQUARZ ABBAUEN) – oder stell dort eine Katze ein.', 'BOHRER ›', 'frostDrill'];
+  if (depot < RAW_PER_CELL && rawReserveCharges() === 0 && (colonyAutomation().stall || colonyAutomation().dock))
+    return ['Eine Zelle braucht ' + RAW_PER_CELL + ' Rohkristalle im Lager: stell an der Thermalwerkstatt eine Rohkristall-Reserve ein (1 Charge) – sonst wird alles verkauft.', 'WERKSTATT ›', 'thermal'];
+  // a new colony runs by hand: the raw crystals only come with mining and the cart (the manager goals wait behind
+  // this story goal, so the card names them here; '0' = the mine's sheet)
+  if (depot < RAW_PER_CELL && (!isAutomated('mine') || !isAutomated('rail')))
+    return [
+      'Eine Zelle braucht ' + RAW_PER_CELL + ' Rohkristalle im Lager. Hier läuft noch alles per Hand: stell eine ' + (!isAutomated('mine') ? 'Bergbau' : 'Transport') + '-Katze ein (EINSTELLEN) – oder ABBAUEN und LORE schicken.',
+      'EINSTELLEN ›',
+      !isAutomated('mine') ? '0' : 'rail'
+    ];
+  return ['Fertige Thermalzellen (ZELLE FERTIGEN) und speise sie an der Thermalwerkstatt ein.', 'WERKSTATT ›', 'thermal'];
+}
 const renderBeforeFrostbyte = render;
 render = () => {
   updateFrostbyte();

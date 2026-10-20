@@ -53,7 +53,18 @@ function colonyIncomeStats(planet) {
       flow = industryFlow[planet],
       sold = flow ? flow.rawSold + flow.barsSold * BAR_RAW : 0,
       fill = Math.max(0, state.planetOps.storage[planet] || 0) / Math.max(1, r.depotCap),
-      perUnit = flow && sold > 0 && flow.credits > 0 ? flow.credits / sold : salePriceMultiplier(fill),
+      // Beta 1.9 M2: the market sells in deliveries, so one tick may hold only raw or only bars – the value of a unit
+      // comes from the measured sales of the window (raw, crates, bars), the last tick only when nothing is measured yet
+      mRaw = measuredRate('rawSold', planet),
+      mPacked = measuredRate('packedSold', planet),
+      mBars = measuredRate('barsSold', planet),
+      mUnits = mRaw + mPacked + mBars * BAR_RAW,
+      perUnit =
+        mUnits > 1e-9
+          ? ((mRaw + mPacked * packPremium() + mBars * barValue()) / mUnits) * salePriceMultiplier(fill) * (typeof coreSaleFactor === 'function' ? coreSaleFactor(planet) : 1)
+          : flow && sold > 0 && flow.credits > 0
+            ? flow.credits / sold
+            : salePriceMultiplier(fill),
       units = automatedIncomeRate(),
       autoSells = Boolean(a.stall || a.dock);
     return {

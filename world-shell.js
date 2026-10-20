@@ -179,7 +179,19 @@ document.addEventListener('click', event => {
 });
 
 // ----- layout: the world fills exactly what the HUD, the dock and the navigation leave -----
-let worldShellSig = '';
+let worldShellSig = '',
+  worldShellNavKey = '',
+  worldShellNavList = null;
+// fixed parts of the page, looked up once (class queries on every render were the rest of the measure's cost)
+const worldShellEls = {};
+function worldShellEl(sel) {
+  const el = worldShellEls[sel];
+  return el?.isConnected ? el : (worldShellEls[sel] = document.querySelector(sel));
+}
+function worldShellNavItems() {
+  if (!worldShellNavList || worldShellNavList.some(el => !el.isConnected)) worldShellNavList = [...document.querySelectorAll('.bottom-nav .nav-item')];
+  return worldShellNavList;
+}
 function measureWorldShell() {
   const root = document.documentElement,
     active = worldShellActive(),
@@ -190,14 +202,22 @@ function measureWorldShell() {
   document.body.classList.toggle('world-mine', Boolean(mine));
   const wide = !worldShellPhone();
   document.body.classList.toggle('world-wide', wide);
-  // a new player has one main view only: no navigation bar for a single tab (the world gets its space)
-  const navItems = [...document.querySelectorAll('.bottom-nav .nav-item')].filter(el => !el.hidden && getComputedStyle(el).display !== 'none');
-  document.body.classList.toggle('nav-single', navItems.length <= 1);
+  // a new player has one main view only: no navigation bar for a single tab (the world gets its space).
+  // The visible count depends on the items' hidden flags and classes and on the body classes (CSS rules); it is
+  // recomputed only when one of those changes (getComputedStyle on every render forced a style pass each tick).
+  const items = worldShellNavItems(),
+    navKey = document.body.className + '|' + items.map(el => (el.hidden ? 'h' : '') + el.className).join('|');
+  if (navKey !== worldShellNavKey) {
+    const visible = items.filter(el => !el.hidden && getComputedStyle(el).display !== 'none').length;
+    document.body.classList.toggle('nav-single', visible <= 1);
+    // the toggle itself changes the body classes: remember the key after it
+    worldShellNavKey = document.body.className + '|' + items.map(el => (el.hidden ? 'h' : '') + el.className).join('|');
+  }
   if (!home && homeSheetOpen) setHomeSheet(false);
   // the daily reward button: an icon beside the gems in the shell, back in the resource row on wide screens
   const daily = $('dailyButton'),
-    actions = document.querySelector('.topbar-actions'),
-    chips = document.querySelector('.mini-resources');
+    actions = worldShellEl('.topbar-actions'),
+    chips = worldShellEl('.mini-resources');
   if (daily && actions && chips) {
     if (active && daily.parentElement !== actions) actions.prepend(daily);
     else if (!active && daily.parentElement !== chips) chips.append(daily);
@@ -205,7 +225,7 @@ function measureWorldShell() {
   if (!active) return;
   const vh = window.visualViewport?.height || window.innerHeight,
     hud = $('worldHud')?.getBoundingClientRect(),
-    nav = document.querySelector('.bottom-nav')?.getBoundingClientRect();
+    nav = worldShellEl('.bottom-nav')?.getBoundingClientRect();
   // portrait: the top of whatever is fixed at the bottom (the production or mine dock, else the navigation);
   // landscape: the navigation is a rail on the left and the dock a column on the right (styles.css);
   // wide: the navigation is a rail on the left and the dock a bar at the bottom
@@ -215,7 +235,8 @@ function measureWorldShell() {
     rightEdge = window.innerWidth;
   for (const id of ['actionDock', 'mineDock']) {
     const d = $(id);
-    if (!d || getComputedStyle(d).display === 'none') continue;
+    if (!d) continue;
+    // a dock hidden by CSS (display: none) has no box: its height is 0 (no separate style query per render)
     const r = d.getBoundingClientRect();
     if (!r.height) continue;
     if (landscape) rightEdge = Math.min(rightEdge, r.left);
@@ -226,7 +247,8 @@ function measureWorldShell() {
     right = Math.max(0, Math.round(window.innerWidth - rightEdge)),
     world = Math.max(160, Math.round(vh - hudH - bottom)),
     railW = rail ? Math.round(nav.right) : 0,
-    sig = hudH + ':' + bottom + ':' + right + ':' + world + ':' + railW;
+    stack = topStackBottom(home && !mine, hudH),
+    sig = hudH + ':' + bottom + ':' + right + ':' + world + ':' + railW + ':' + stack;
   if (sig === worldShellSig) return;
   worldShellSig = sig;
   root.style.setProperty('--w-hud', hudH + 'px');
@@ -234,6 +256,21 @@ function measureWorldShell() {
   root.style.setProperty('--w-right', right + 'px');
   root.style.setProperty('--w-world', world + 'px');
   root.style.setProperty('--w-rail', railW + 'px');
+  // P1.2: the lower edge of the top stack (next step, sector event): the place name and the story line sit under it
+  root.style.setProperty('--w-stack', stack + 'px');
+}
+// P1.2: the top of the world is one stack, never overlapping: the next step, the sector event, then the place name
+// (and a story line). Measured from the cards themselves (their height changes with the text and the screen).
+function topStackBottom(home, hudH) {
+  let bottom = hudH;
+  if (!home) return bottom;
+  for (const id of ['objectiveCard', 'eventCard']) {
+    const el = $(id);
+    if (!el || el.classList.contains('hidden')) continue;
+    const r = el.getBoundingClientRect();
+    if (r.height) bottom = Math.max(bottom, Math.round(r.bottom));
+  }
+  return bottom;
 }
 function scheduleWorldShell() {
   requestAnimationFrame(() => {
@@ -244,12 +281,17 @@ function scheduleWorldShell() {
 }
 worldShellMedia?.addEventListener?.('change', () => {
   worldShellSig = '';
+  worldShellNavKey = '';
   setHomeSheet(false);
   scheduleWorldShell();
 });
-window.addEventListener('resize', scheduleWorldShell);
+window.addEventListener('resize', () => {
+  worldShellNavKey = ''; // a breakpoint may show or hide navigation items
+  scheduleWorldShell();
+});
 window.addEventListener('orientationchange', () => {
   worldShellSig = '';
+  worldShellNavKey = '';
   scheduleWorldShell();
 });
 window.visualViewport?.addEventListener('resize', scheduleWorldShell);
@@ -271,6 +313,8 @@ function mineFullyAutomated() {
     shafts = builtShafts();
   return open && shafts.length > 0 && shafts.every(x => auto[x.id]) && Boolean(auto.elevator);
 }
+let placeShownFor = null,
+  placeTimer = 0;
 function renderWorldShell() {
   const home = worldShellActive() && currentScreen() === 'home',
     onMine = currentScreen() === 'home' && typeof mineView !== 'undefined' && Boolean(mineView);
@@ -298,7 +342,18 @@ function renderWorldShell() {
     const toggle = $('mineToggle');
     if (toggle) toggle.hidden = navMine.hidden;
     navMine.classList.toggle('active', onMine);
+    // P1.2: the navigation's Mine carries the "can be built" dot (the bar's own ⛏ is gone in the shell)
+    navMine.classList.toggle('ready', !navMine.hidden && canOpenUnderground() && !undergroundOpen());
     navButton('home')?.classList.toggle('active', currentScreen() === 'home' && !onMine);
+  }
+  // P1.2: on phones the place name shows on arrival (a new world, the first view) and then gives the sky back; the
+  // status chip (a bottleneck) stays. Wide screens keep the name.
+  if (home && placeShownFor !== state.activePlanet) {
+    placeShownFor = state.activePlanet;
+    const card = $('heroCard');
+    card?.classList.add('arrive');
+    clearTimeout(placeTimer);
+    placeTimer = setTimeout(() => card?.classList.remove('arrive'), 3800);
   }
   const planet = $('homeSheetPlanet');
   if (planet) {
@@ -327,6 +382,42 @@ function renderWorldShell() {
     top.append(b);
   }
 })();
+// P1.2: the mine's quick jumps behind one labelled button (before: a second row of five unlabelled icons ⤒ ⤓ 🚧 ⚠ ◫).
+// The list shows each jump with its name; the overview button gets the same 📋 as the colony's details (☰ is the menu).
+(function buildMineJumpPicker() {
+  const nav = document.querySelector('#mineHud .mine-nav');
+  if (!nav || $('mineJumpPick')) return;
+  for (const b of nav.querySelectorAll('button')) {
+    const label = b.getAttribute('aria-label') || '';
+    b.innerHTML = '<span aria-hidden="true">' + b.textContent.trim() + '</span><b>' + label + '</b>';
+  }
+  const pick = document.createElement('button');
+  pick.id = 'mineJumpPick';
+  pick.className = 'mine-jump-pick';
+  pick.type = 'button';
+  pick.setAttribute('aria-haspopup', 'true');
+  pick.setAttribute('aria-expanded', 'false');
+  pick.setAttribute('aria-label', 'Springen: Oberfläche, tiefster Schacht, Baustelle, Engpass, Zone');
+  pick.innerHTML = '<span aria-hidden="true">⇕</span><b>Springen</b><i aria-hidden="true">▾</i>';
+  nav.prepend(pick);
+  const over = $('mineOverviewBtn');
+  if (over) over.innerHTML = '📋<span> Übersicht</span>';
+})();
+function setMineJumps(open) {
+  const nav = document.querySelector('#mineHud .mine-nav');
+  nav?.classList.toggle('open', Boolean(open));
+  $('mineJumpPick')?.setAttribute('aria-expanded', String(Boolean(open)));
+}
+document.addEventListener('click', event => {
+  if (event.target.closest('#mineJumpPick')) {
+    setMineJumps(!document.querySelector('#mineHud .mine-nav')?.classList.contains('open'));
+    feedback('open');
+    return;
+  }
+  // a jump (or a tap anywhere else) closes the list; the jump itself runs in deepcore-ui.js. The zone jump cycles
+  // through the zones tap by tap: the list stays open for it.
+  if (!event.target.closest('[data-mine-zone]')) setMineJumps(false);
+});
 document.addEventListener('click', event => {
   if (event.target.closest('#dockHandButton')) {
     $('dockToggle')?.click();
@@ -359,3 +450,18 @@ scheduleWorldShell();
 // the game's first render ran before this file wrapped render(): bring the shell (mine tab, classes) up to date now,
 // not on the first tick a second later (Beta 1.7 QA)
 renderWorldShell();
+
+// R1: two goals live inside the Details sheet – "Förderbasis ausbauen" and "Planetenrolle wählen" (the planet
+// development card) – and a tap on the next-step card answered nothing (guided-player audit, BUG_TRIAGE.md R1-12).
+// It now opens the sheet at that card (revealInHomeSheet was there for such guidance); without the phone shell the page
+// scrolls to it.
+document.addEventListener('click', event => {
+  if (!event.target.closest('#objectiveCard')) return;
+  if (!['Planetenrolle wählen', 'Förderbasis ausbauen'].includes($('objectiveTitle')?.textContent)) return;
+  const card = $('planetCommand');
+  if (!card) return;
+  setTimeout(() => {
+    if (!revealInHomeSheet(card)) card.scrollIntoView?.({ block: 'center', behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth' });
+    if (typeof feedback === 'function') feedback('open');
+  }, 0);
+});

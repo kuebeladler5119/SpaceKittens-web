@@ -179,12 +179,14 @@ function mineFloors(planet = state.activePlanet) {
     if (below < 0) floors.push(conduit);
     else floors.splice(below, 0, conduit);
   }
-  // Beta 1.7 M9: the planetary core below the deepest shaft (Orion's Kristallkern)
-  if (planet === 0 && typeof corePhase === 'function' && corePhase('crystal') !== 'hidden') {
-    const phase = corePhase('crystal'),
-      st = coreStage('crystal'),
-      def = CORES.crystal;
-    floors.push({ kind: 'core', id: 'core', zone: 'geode', phase, stage: st, title: def.name + (phase === 'healed' ? ' · geheilt' : ' · ' + st + '/3 geheilt'), sub: phase === 'healed' ? 'Orion ist verwandelt' : def.stages[st].name + ' ›' });
+  // Beta 1.7 M9: the planetary core below the deepest shaft (Orion's Kristallkern; Beta 1.9 M7: Glacies' Thermalkern)
+  const coreKey = typeof coreKeyOf === 'function' ? coreKeyOf(planet) : planet === 0 ? 'crystal' : null;
+  let coreFloor = null; // (Beta 1.9: the core lies below every shaft, also below the next construction site)
+  if (coreKey && typeof corePhase === 'function' && corePhase(coreKey) !== 'hidden') {
+    const phase = corePhase(coreKey),
+      st = coreStage(coreKey),
+      def = CORES[coreKey];
+    coreFloor = { kind: 'core', id: 'core', coreKey, zone: coreKey === 'ice' ? 'frost' : 'geode', phase, stage: st, title: def.name + (phase === 'healed' ? ' · geheilt' : ' · ' + st + '/3 geheilt'), sub: phase === 'healed' ? PLANETS[def.planet].name + ' ist verwandelt' : def.stages[st].name + ' ›' };
   }
   // construction frontier: the next shaft of this planet (or the mine opening itself)
   const next = def.shafts.find(s => s.id !== 'mine' && !shaftBuilt(s.id, planet) && !shaftUnderConstruction(s.id, planet));
@@ -193,6 +195,7 @@ function mineFloors(planet = state.activePlanet) {
     const blocker = shaftBlocker(next.id, planet);
     floors.push({ kind: 'frontier', id: next.id, depth: next.depth, zone: next.zone, title: 'Baustelle · ' + next.name, sub: blocker || '◈ ' + fmt(shaftCost(next.id, planet)) + ' · Bauzeit ' + dcTime(next.build || 60), locked: Boolean(blocker) });
   }
+  if (coreFloor) floors.push(coreFloor);
   const future = def.zones.find(z => z.future);
   // (Beta 1.7 M9: once the planetary core is found it takes the place of the unexplored depth below)
   if (open && future && !floors.some(f => f.kind === 'core')) floors.push({ kind: 'future', id: 'future', zone: 'future', name: future.name });
@@ -209,6 +212,7 @@ window.NebulaView.mine = () => {
     e = elevatorState(p);
   return {
     cosmeticMine: mineViewCosmetic(),
+    cosmeticVehicle: state.meta.equipped?.vehicle || null, // P1.5: the mine carts take the vehicle paint
     planetId: PLANETS[p].id,
     planetIndex: p,
     available: Boolean(def),
@@ -250,7 +254,18 @@ window.NebulaView.colony = () => {
     p = state.activePlanet;
   const met = voidMet();
   if (!undergroundOpen(p)) return { ...view, voidMet: met };
-  return { ...view, voidMet: met, underground: { level: elevatorLevel(p), running: elevatorState(p).phase !== 'surface_idle' } };
+  // Beta 1.9 M1/M2: the cabin as the underground moves it, for the headframe's "Förderung oben" display
+  const e = elevatorState(p),
+    cap = elevatorCapacity(e.cap, e.tier || 0);
+  return {
+    ...view,
+    voidMet: met,
+    underground: {
+      level: elevatorLevel(p),
+      running: e.phase !== 'surface_idle',
+      lift: { phase: e.phase, progress: e.dur > 0 ? Math.max(0, Math.min(1, 1 - e.left / e.dur)) : 1, fill: Math.min(1, (e.load || 0) / Math.max(1, cap)), tier: e.tier || 0 }
+    }
+  };
 };
 window.NebulaColonyActions.enterMine = () => setMineView(true);
 
@@ -525,7 +540,7 @@ function coreSheetHTML(key) {
     phase = corePhase(key),
     done = def.stages.map((st, i) => `<li class="${i < s.stage ? 'done' : i === s.stage ? 'now' : ''}"><b>${i + 1}. ${st.name}</b><small>${st.reward}</small></li>`).join('');
   let body = '';
-  if (phase === 'healed') body = '<p class="sheet-effect">Der Kern ist geheilt. Orion leuchtet – alle Verkäufe auf Orion bringen 25 % mehr.</p>';
+  if (phase === 'healed') body = `<p class="sheet-effect">${def.healed}</p>`;
   else {
     const st = def.stages[s.stage],
       sources = coreSources(key),
@@ -535,21 +550,22 @@ function coreSheetHTML(key) {
             have = item === 'credits' || item === 'crystals' ? coreItemStock(item) : sources.reduce((sum, p) => sum + Math.floor(fabStock(p, item)), 0),
             [name, icon] = item === 'crystals' ? ['Kristalle', '◆'] : techItemName(item),
             left = Math.max(0, need - paid);
-          return `<li class="core-need"><div><b>${icon} ${name}</b><small>${fmt(paid)} / ${fmt(need)} · verfügbar ${fmt(have)}</small><i class="station-bar"><u style="width:${Math.round((paid / need) * 100)}%"></u></i></div><button data-core-give="${item}" ${left > 0 && have >= 1 ? '' : 'disabled'}>${left <= 0 ? '✓' : 'LIEFERN'}</button></li>`;
+          return `<li class="core-need"><div><b>${icon} ${name}</b><small>${fmt(paid)} / ${fmt(need)} · verfügbar ${fmt(have)}</small><i class="station-bar"><u style="width:${Math.round((paid / need) * 100)}%"></u></i></div><button data-core-give="${item}" data-core-key="${key}" ${left > 0 && have >= 1 ? '' : 'disabled'}>${left <= 0 ? '✓' : 'LIEFERN'}</button></li>`;
         })
         .join('');
     body = `<p class="sheet-effect">Stufe ${s.stage + 1}: ${st.name} – Belohnung: ${st.reward} Teillieferungen zählen.${typeof techHas === 'function' && techHas('coreProbe') ? ' Die Kernsonde nimmt Material aus allen Kolonien.' : ' Geliefert wird aus der besuchten Kolonie.'}</p><ul class="core-needs">${rows}</ul>`;
   }
-  return deepSheetHead('◉', def.name + ' · Tiefe 15', 'Der beschädigte Kern des Kristallplaneten. Seit der Großen Stille ist er gesprungen – heile ihn in drei Stufen.') + body + `<ol class="core-stages">${done}</ol>`;
+  return deepSheetHead(key === 'ice' ? '♨' : '◉', def.name + ' · ' + def.depth, def.intro) + body + `<ol class="core-stages">${done}</ol>`;
 }
 document.addEventListener('click', event => {
   const give = event.target.closest('[data-core-give]');
   if (!give) return;
-  const before = coreStage('crystal'),
-    n = coreDeliver(give.dataset.coreGive, 'crystal');
+  const key = give.dataset.coreKey || 'crystal',
+    before = coreStage(key),
+    n = coreDeliver(give.dataset.coreGive, key);
   if (n > 0) {
     feedback('upgrade', 'success');
-    toast(coreStage('crystal') > before ? '◉ Kernstufe ' + coreStage('crystal') + ' geheilt!' : 'Geliefert: ' + fmt(n));
+    toast(coreStage(key) > before ? (key === 'ice' ? '♨ ' : '◉ ') + CORES[key].name + ': Stufe ' + coreStage(key) + ' geheilt!' : 'Geliefert: ' + fmt(n));
     requestSave(200);
   }
   renderBuildingSheet();
@@ -625,7 +641,7 @@ window.NebulaColonyActions.mineTap = (type, key) => {
   else if (type === 'construction') openBuildingSheet('dc:build:' + key);
   else if (type === 'open') openBuildingSheet('dc:open');
   else if (type === 'conduit') openBuildingSheet('dc:conduit');
-  else if (type === 'core') openBuildingSheet('dc:core:crystal');
+  else if (type === 'core') openBuildingSheet('dc:core:' + (key || 'crystal'));
   else if (type === 'frost') openBuildingSheet('frostDrill');
   else if (type === 'void') voidChat();
   else if (type === 'surface') setMineView(false);
@@ -975,3 +991,43 @@ function liftTierRowHTML(e, rate) {
   const after = elevatorCapacity(e.cap, e.tier + 1) / elevatorCycle();
   return `<li class="track-row lift-tier"><i>⬢</i><div><b>Kabine · ${name} (${e.tier}/${max})</b><small>${blocker ? blocker + ' – dann: ' + next + ', ×' + LIFT_TIER.mult + ' Ladung' : next + ': ×' + LIFT_TIER.mult + ' Ladung · ' + fmtRate(rate) + ' → ' + fmtRate(after) + '/s'}</small></div><button data-dc-tier ${blocker || state.credits < price ? 'disabled' : ''}><b>${fmt(price)}</b></button></li>`;
 }
+
+// ----- R1: a stopped elevator is named, with both ways out -----
+// After the Förderturm the mine's output only comes up with the elevator. A new player who built it, closed the
+// elevator's panel and went back up (the way-back hint sends them) saw "Alles läuft" and a goal elsewhere while the
+// colony earned nothing (guided-player audit, docs/release-r1/BUG_TRIAGE.md R1-04). Now the next-step card names it:
+// send the lift by hand (MINE ›) or hire the operator when it is affordable. Prices and rules are unchanged.
+{
+  const renderBeforeLift = render;
+  render = function (...args) {
+    const out = renderBeforeLift.apply(this, args);
+    const card = $('objectiveCard');
+    if (!card) return out;
+    card.dataset.mine = '';
+    // a chapter's own goal (P.I.P.S. on Orion, the planet stories) keeps the card; the status line still says it
+    const chapter = (typeof planetStoryGoalActive === 'function' && planetStoryGoalActive()) || (state.activePlanet === 0 && ['warned', 'battle', 'defeated'].includes(pips().stage));
+    if (!liftWaiting() || chapter || (typeof onboardingStep === 'function' && onboardingStep())) return out;
+    const price = hireCost('elevator'),
+      afford = state.credits >= price;
+    $('objectiveIcon').textContent = '⇕';
+    $('objectiveTitle').textContent = 'Aufzug in Gang bringen';
+    $('objectiveText').textContent = afford
+      ? 'Erz wartet unten in der Mine. Stell einen Aufzugsführer ein (◈ ' + fmt(price) + ') – dann fährt der Aufzug von selbst.'
+      : 'Erz wartet unten in der Mine. Schick den Aufzug per Hand (⛏ Mine → AUFZUG), bis ◈ ' + fmt(price) + ' für einen Aufzugsführer da sind.';
+    $('objectiveAction').textContent = 'MINE ›';
+    card.dataset.screen = 'home';
+    card.dataset.sheet = '';
+    card.dataset.tab = '';
+    card.dataset.mine = '1';
+    return out;
+  };
+}
+document.addEventListener('click', event => {
+  const card = event.target.closest('#objectiveCard');
+  if (card?.dataset.mine !== '1') return;
+  setTimeout(() => {
+    setMineView(true);
+    render();
+    if (state.credits >= hireCost('elevator')) openBuildingSheet('dc:elevator');
+  }, 0);
+});

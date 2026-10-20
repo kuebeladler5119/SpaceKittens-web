@@ -95,8 +95,21 @@ try {
   trade.querySelector('.section-jumps')?.setAttribute('hidden', '');
 })();
 
+// the tagged cards of a screen are collected once (render() runs every tick, and a document-wide attribute query per
+// area and render was the costliest part of a tick; gameplay-loop CI measurement). A card that left the page refreshes
+// the list; code that tags new cards later calls viewTabsChanged().
+const viewTabNodes = {};
+function viewTabsChanged(screen) {
+  if (screen) delete viewTabNodes[screen];
+  else for (const k of Object.keys(viewTabNodes)) delete viewTabNodes[k];
+}
+function viewTabCards(screen) {
+  let list = viewTabNodes[screen];
+  if (!list || list.some(el => !el.isConnected)) list = viewTabNodes[screen] = [...($(screen)?.querySelectorAll('[data-view-tab]') || [])];
+  return list;
+}
 function viewTabHasContent(screen, tab) {
-  return [...document.querySelectorAll(`#${screen} [data-view-tab="${tab}"]`)].some(el => !el.hidden && !el.classList.contains('hidden') && !el.classList.contains('section-heading'));
+  return viewTabCards(screen).some(el => el.dataset.viewTab === tab && !el.hidden && !el.classList.contains('hidden') && !el.classList.contains('section-heading'));
 }
 // a live fight in the Abenteuer card (not the fullscreen arena: that has its own layer)
 function adventureFightLive() {
@@ -211,7 +224,46 @@ renderObjective = function () {
     card.dataset.screen = 'trade';
     (viewTab.trade = 'planets'), (viewTabChosen.trade = true);
   }
+  // R1: the sector goals (Vesper-Drift kartieren, Sektorprofil auswerten, Expedition begleiten) live in the Planeten
+  // area. A player who had chosen another area last landed on "✦ Sektor", whose free Signal-Scanner says "✦ SCANNEN" –
+  // the guided-player audit pressed it for hours (docs/release-r1/GAMEPLAY_AUDIT.md). renderSectorObjective (game.js,
+  // drawn after this) sets the tab and names the button as it is written (SCAN); every other goal clears it here.
+  card.dataset.tab = '';
+  delete card.dataset.goPlanet; // never data-planet: the planet route's handler reacts to any [data-planet]
+  // R1-14: a colony founded but never visited (no cat hired there yet) waited unseen – the card kept showing the old
+  // planet's general goals for hours (guided-player audit). Instead of those general goals it now names the new colony;
+  // story, sector, elevator and first-step goals keep their priority.
+  const GENERIC = ['Planetenrolle wählen', 'Förderbasis ausbauen', 'Transportengpass lösen', 'Mine ausbauen'];
+  const fresh = PLANETS.findIndex((_, i) => i !== state.activePlanet && state.planetsUnlocked[i] && state.colonies[i] && Object.values(state.colonies[i].staff || {}).every(n => !n));
+  if (fresh > 0 && GENERIC.includes($('objectiveTitle')?.textContent)) {
+    $('objectiveIcon').textContent = '🪐';
+    $('objectiveTitle').textContent = PLANETS[fresh].name + ' besuchen';
+    $('objectiveText').textContent = 'Deine neue Kolonie wartet: eigene Gebäude, eigene Rohstoffe und die nächste Geschichte. Flieg über die Galaxie hin (HINFLIEGEN).';
+    $('objectiveAction').textContent = 'GALAXIE ›';
+    card.dataset.screen = 'trade';
+    card.dataset.sheet = '';
+    card.dataset.tab = 'route';
+    card.dataset.goPlanet = String(fresh);
+  }
 };
+document.addEventListener('click', event => {
+  const card = event.target.closest('#objectiveCard');
+  if (!card?.dataset.tab) return;
+  setTimeout(() => {
+    setViewTab('trade', 'planets');
+    const target =
+      card.dataset.tab === 'route'
+        ? document.querySelector('#planetPanel [data-planet="' + card.dataset.goPlanet + '"]')
+        : document.querySelector('#sectorPanel [data-sector-scan], #sectorPanel [data-sector-expedition]') || $('sectorPanel');
+    target?.scrollIntoView?.({ block: 'center', behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth' });
+    if (target?.matches?.('button')) {
+      target.classList.remove('step-nudge');
+      void target.offsetWidth;
+      target.classList.add('step-nudge');
+      setTimeout(() => target.classList.remove('step-nudge'), 750);
+    }
+  }, 0);
+});
 
 const renderBeforeViews = render;
 render = () => {

@@ -75,37 +75,265 @@
     }
   ]);
 
+  // P1.4: every look also carries its rarity (COSMETIC_RARITIES), and where it belongs: `world` (a planet theme of
+  // COSMETIC_WORLDS), `guardian` (the guardian whose look it is) and `anim` (its own animation: glint, gear, sway, swing,
+  // tick, shimmer); the sets list their pieces (COSMETIC_SETS). Ids, prices and slots never change (saves own them).
   const COSMETICS = Object.freeze({
-    'ship-aurora': { slot: 'ship', name: 'Aurora-Lackierung', icon: '🚀' },
-    'ring-gold': { slot: 'ring', name: 'Goldener Orbitalring', icon: '🪐' },
-    'trail-nebula': { slot: 'trail', name: 'Nebel-Drohnenspur', icon: '✦' },
-    'ship-ember': { slot: 'ship', name: 'Glut-Lackierung', icon: '🔥' },
-    'ring-frost': { slot: 'ring', name: 'Frost-Orbitalring', icon: '❄' },
-    'trail-solar': { slot: 'trail', name: 'Sonnenwind-Spur', icon: '☀' },
-    // Mochi accessories (welcome capsule pool; purely visual)
-    'acc-star-helmet': { slot: 'mochi', name: 'Sternchen-Helm', icon: '⭐' },
-    'acc-mint-scarf': { slot: 'mochi', name: 'Mint-Schal', icon: '🧣' },
-    'acc-star-backpack': { slot: 'mochi', name: 'Goldener Sternrucksack', icon: '🎒' },
-    'acc-cute-antenna': { slot: 'mochi', name: 'Herz-Antenne', icon: '📡' },
-    'acc-explorer-goggles': { slot: 'mochi', name: 'Mini-Forscherbrille', icon: '🥽' },
-    'acc-moon-patch': { slot: 'mochi', name: 'Mond-Aufnäher', icon: '🌙' },
+    'ship-aurora': { slot: 'ship', name: 'Aurora-Lackierung', icon: '🚀', rarity: 'rare' },
+    'ring-gold': { slot: 'ring', name: 'Goldener Orbitalring', icon: '🪐', rarity: 'rare' },
+    'trail-nebula': { slot: 'trail', name: 'Nebel-Drohnenspur', icon: '✦', rarity: 'rare' },
+    'ship-ember': { slot: 'ship', name: 'Glut-Lackierung', icon: '🔥', rarity: 'epic', world: 'pyra' },
+    'ring-frost': { slot: 'ring', name: 'Frost-Orbitalring', icon: '❄', rarity: 'rare', world: 'glacies' },
+    'trail-solar': { slot: 'trail', name: 'Sonnenwind-Spur', icon: '☀', rarity: 'rare' },
+    // Kitten accessories (welcome capsule pool; purely visual). P1: `wear` is the kitten slot (head, suit, face, back)
+    // a piece is worn in, per character (meta.wardrobe); the old `slot` stays for saves of older builds. Prices are
+    // in existing in-game currencies only: credits (simple), gems (special), Sternsplitter (forge) or a free
+    // achievement — docs/p1-kitty-identity/COSMETIC_ECONOMY.md.
+    'acc-star-helmet': { slot: 'mochi', wear: 'head', name: 'Sternchen-Helm', icon: '⭐', credits: 3000, text: 'Goldener Helmrand mit Stern', rarity: 'common' },
+    'acc-mint-scarf': { slot: 'mochi', wear: 'back', name: 'Mint-Schal', icon: '🧣', credits: 1500, text: 'Ein weicher Schal, dessen Enden beim Laufen flattern', rarity: 'common' },
+    'acc-star-backpack': { slot: 'mochi', wear: 'back', name: 'Goldener Sternrucksack', icon: '🎒', credits: 3500, text: 'Ein goldener Rucksack mit Stern', rarity: 'common' },
+    'acc-cute-antenna': { slot: 'mochi', wear: 'head', name: 'Herz-Antenne', icon: '📡', credits: 2000, text: 'Eine federnde Antenne mit Herz', rarity: 'common' },
+    'acc-explorer-goggles': { slot: 'mochi', wear: 'face', name: 'Mini-Forscherbrille', icon: '🥽', credits: 2500, text: 'Runde Messingbrille auf den Augen', rarity: 'common' },
+    'acc-moon-patch': { slot: 'mochi', wear: 'back', name: 'Mond-Aufnäher', icon: '🌙', credits: 1500, text: 'Ein Mondabzeichen auf der Schulter', rarity: 'common' },
+    'acc-cat-helmet': { slot: 'mochi', wear: 'head', name: 'Katzenohren-Helm', icon: '😺', gems: 60, text: 'Ein Glashelm mit zwei Katzenohren', rarity: 'rare' },
+    'acc-headphones': { slot: 'mochi', wear: 'head', name: 'Katzen-Kopfhörer', icon: '🎧', achievement: 'crew2', text: 'Pastell-Kopfhörer mit Öhrchen', rarity: 'rare' },
+    'acc-pilot-visor': { slot: 'mochi', wear: 'face', name: 'Pilotenvisier', icon: '🕶', credits: 4000, text: 'Ein getöntes Visier über den Augen', rarity: 'common' },
+    'acc-holo-monocle': { slot: 'mochi', wear: 'face', name: 'Holo-Monokel', icon: '🧿', gems: 40, text: 'Ein Hologramm-Monokel mit Scanlinie', rarity: 'rare' },
+    'acc-rocket-pack': { slot: 'mochi', wear: 'back', name: 'Mini-Raketenrucksack', icon: '🚀', gems: 50, text: 'Zwei kleine Düsen, die beim Springen aufflammen', rarity: 'rare' },
+    'acc-tool-pack': { slot: 'mochi', wear: 'back', name: 'Werkzeugrucksack', icon: '🧰', credits: 2500, text: 'Schraubenschlüssel und Schraubendreher immer dabei', rarity: 'common' },
     // Beta 1.2 Sternenschmiede: earned with Sternsplitter (forge = price in ✦), purely visual, never sold here.
     // Same ownership list as every other cosmetic, so a later direct sale or bundle can reuse it without duplicates.
-    'glider-midnight': { slot: 'glider', name: 'Mitternachtsgleiter', icon: '🌌', forge: 150, text: 'Tikkis Gleiter in Nachtblau mit Sternpunkten' },
-    'glider-blossom': { slot: 'glider', name: 'Kirschblütengleiter', icon: '🌸', forge: 150, text: 'Tikkis Gleiter in Rosa mit Blütenkante' },
-    'impact-gold': { slot: 'impact', name: 'Goldfunken', icon: '✨', forge: 120, text: 'Deine Schiffsschüsse und Treffer leuchten golden' },
-    'impact-aurora': { slot: 'impact', name: 'Polarlicht-Funken', icon: '🌈', forge: 120, text: 'Deine Schiffsschüsse und Treffer leuchten türkis-violett' },
-    'engine-comet': { slot: 'engine', name: 'Kometenschweif', icon: '☄', forge: 200, text: 'Eine funkelnde Spur hinter deinem Schiff im Kampf' },
-    'ship-starlight': { slot: 'ship', name: 'Sternenstaub-Lackierung', icon: '🌟', forge: 250, text: 'Nachtblaues Schiff mit goldenen Akzenten – in Kolonie und Kampf' },
+    'glider-midnight': { slot: 'glider', name: 'Mitternachtsgleiter', icon: '🌌', forge: 150, text: 'Tikkis Gleiter in Nachtblau mit Sternpunkten', rarity: 'rare' },
+    'glider-blossom': { slot: 'glider', name: 'Kirschblütengleiter', icon: '🌸', forge: 150, text: 'Tikkis Gleiter in Rosa mit Blütenkante', rarity: 'rare' },
+    'impact-gold': { slot: 'impact', name: 'Goldfunken', icon: '✨', forge: 120, text: 'Deine Schiffsschüsse und Treffer leuchten golden', rarity: 'rare' },
+    'impact-aurora': { slot: 'impact', name: 'Polarlicht-Funken', icon: '🌈', forge: 120, text: 'Deine Schiffsschüsse und Treffer leuchten türkis-violett', rarity: 'rare' },
+    'engine-comet': { slot: 'engine', name: 'Kometenschweif', icon: '☄', forge: 200, text: 'Eine funkelnde Spur hinter deinem Schiff im Kampf', rarity: 'epic' },
+    'ship-starlight': { slot: 'ship', name: 'Sternenstaub-Lackierung', icon: '🌟', forge: 250, text: 'Nachtblaues Schiff mit goldenen Akzenten – in Kolonie und Kampf', rarity: 'epic' },
     // Beta 1.3 looks: also forged with Sternsplitter (earned only), purely visual, one ownership list
-    'outfit-rose': { slot: 'outfit', name: 'Rosa Raumanzug', icon: '🩷', forge: 180, text: 'Mochis Anzug in Rosa mit weißen Kanten – Kolonie, Mine und Porträts' },
-    'outfit-explorer': { slot: 'outfit', name: 'Forscher-Overall', icon: '🧭', forge: 180, text: 'Mochis Anzug in Sandbraun mit Korallen-Akzenten – für Expeditionen' },
-    'ship-sakura': { slot: 'ship', name: 'Kirschblüten-Lack', icon: '🌸', forge: 220, text: 'Weiß-rosa Schiff mit Blütenkante – in Kolonie und Kampf' },
-    'ship-mint': { slot: 'ship', name: 'Minz-Lack', icon: '🍃', forge: 220, text: 'Mintgrünes Schiff mit cremefarbenen Streifen – in Kolonie und Kampf' },
-    'deco-lanterns': { slot: 'colony', name: 'Laternenkette', icon: '🏮', forge: 160, text: 'Bunte Laternen über deiner Kolonie, die abends leuchten' },
-    'mine-crystal-lamps': { slot: 'mine', name: 'Kristall-Grubenlampen', icon: '💎', forge: 160, text: 'Leuchtende Kristalllampen an jeder Sohle deiner Mine' }
+    'outfit-rose': { slot: 'outfit', wear: 'suit', name: 'Rosa Raumanzug', icon: '💗', forge: 180, text: 'Rosa Anzug mit weißen Kanten und Herz – Kolonie, Mine und Porträts', rarity: 'rare' },
+    'outfit-explorer': { slot: 'outfit', wear: 'suit', name: 'Forscher-Overall', icon: '🧭', forge: 180, text: 'Sandbraune Weste mit Taschen, Kompass und Halstuch – für Expeditionen', rarity: 'rare' },
+    'outfit-stellar': { slot: 'outfit', wear: 'suit', name: 'Sternenforscher', icon: '🌟', gems: 90, text: 'Cremefarbener Anzug mit goldenen Sternen und Forschungsemblem', rarity: 'epic' },
+    'outfit-miner': { slot: 'outfit', wear: 'suit', name: 'Kristall-Bergarbeiter', icon: '⛏', credits: 6000, text: 'Latzhose mit Trägern, Kristalltasche und Nähten', rarity: 'common', world: 'orion' },
+    'outfit-glacies': { slot: 'outfit', wear: 'suit', name: 'Glacies-Pilot', icon: '❄', credits: 15000, text: 'Gesteppter Frostanzug mit Fellkragen, Schulterpolstern und Fäustlingen', rarity: 'rare', world: 'glacies' },
+    'outfit-pyra': { slot: 'outfit', wear: 'suit', name: 'Pyra-Mechaniker', icon: '🔧', credits: 12000, text: 'Arbeitsanzug mit hochgekrempelten Ärmeln, Werkzeuggürtel und Zahnrad', rarity: 'rare', world: 'pyra' },
+    'outfit-viridia': { slot: 'outfit', wear: 'suit', name: 'Viridia-Botaniker', icon: '🌿', credits: 12000, text: 'Laborkittel mit Blattkragen, Bio-Abzeichen und Setzling', rarity: 'rare', world: 'viridia' },
+    'outfit-pajama': { slot: 'outfit', wear: 'suit', name: 'Mondschlafanzug', icon: '🌜', achievement: 'expedition', text: 'Sternenpyjama mit Knopfleiste und Schlafmütze', rarity: 'rare' },
+    'outfit-navigator': { slot: 'outfit', wear: 'suit', name: 'Nebula-Navigator', icon: '🌌', forge: 240, text: 'Violetter Spezialanzug mit türkisen Lichtlinien und Umhang – wie für Void gemacht', rarity: 'epic' },
+    'ship-sakura': { slot: 'ship', name: 'Kirschblüten-Lack', icon: '🌸', forge: 220, text: 'Weiß-rosa Schiff mit Blütenkante – in Kolonie und Kampf', rarity: 'rare' },
+    'ship-mint': { slot: 'ship', name: 'Minz-Lack', icon: '🍃', forge: 220, text: 'Mintgrünes Schiff mit cremefarbenen Streifen – in Kolonie und Kampf', rarity: 'rare' },
+    'deco-lanterns': { slot: 'colony', name: 'Laternenkette', icon: '🏮', forge: 160, text: 'Bunte Laternen über deiner Kolonie, die abends leuchten', rarity: 'rare', world: 'orion' },
+    'mine-crystal-lamps': { slot: 'mine', name: 'Kristall-Grubenlampen', icon: '💎', forge: 160, text: 'Leuchtende Kristalllampen an jeder Sohle deiner Mine', rarity: 'rare', world: 'orion' },
+    // P1.2: the ship's signature (a decal on the hull – the role emblem on the wing stays the ship's DNA) and the muzzle
+    // style of the weapons (an ornament on the DNA muzzle flash – the chassis shape and the affinity colour stay)
+    'decal-paw': { slot: 'decal', name: 'Pfoten-Abzeichen', icon: '🐾', credits: 5000, text: 'Ein Pfotenabdruck auf der Hülle – dein Schiff, deine Signatur', rarity: 'common' },
+    'decal-comet': { slot: 'decal', name: 'Kometen-Signatur', icon: '☄', forge: 160, text: 'Ein Komet mit Schweif auf der Hülle, golden umrandet', rarity: 'rare' },
+    'muzzle-star': { slot: 'muzzle', name: 'Sternenblitz', icon: '⭐', forge: 140, text: 'Jeder Schuss startet mit kleinen Sternen am Lauf', rarity: 'rare' },
+    'muzzle-heart': { slot: 'muzzle', name: 'Herzfunke', icon: '💗', credits: 8000, text: 'Ein Herz blitzt am Lauf auf, wenn du feuerst', rarity: 'common' },
+    // P1.3: guardian rewards – free, granted once when the guardian is beaten (wardrobe.js WARDROBE_ACHIEVEMENTS); the
+    // guaranteed rewards of the fights stay exactly as they were
+    'decal-pips': { slot: 'decal', name: 'Prüfsiegel', icon: '✅', achievement: 'pips', text: 'Das Siegel von P.I.P.S. auf deiner Hülle – Inspektion bestanden', rarity: 'epic', world: 'orion', guardian: 'pips' },
+    'impact-frost': { slot: 'impact', name: 'Frostsplitter', icon: '❄', achievement: 'frostbyte', text: 'Deine Treffer sprühen Eissplitter wie Frostbytes Platten', rarity: 'epic', world: 'glacies', guardian: 'frostbyte' },
+    // P1.3: the first building look – the market stall's awning (P1.4: on every planet's stall)
+    'stall-sunset': { slot: 'stall', name: 'Abendrot-Markise', icon: '🌅', forge: 150, text: 'Orange-cremefarbene Markise und warme Lichterkette über deinem Marktstand', rarity: 'rare', world: 'orion' },
+    // ----- P1.4 Cosmetics 2.0: a few looks made with care (shape, material and motion, not only colour) -----
+    // Glacies-Forscherset (complete it for the Polarlicht-Rahmen): visor, paint, engine trail and stall join the
+    // Glacies-Pilot suit and Frostbyte's Frostsplitter
+    'acc-frost-visor': { slot: 'mochi', wear: 'face', name: 'Frostvisier', icon: '🧊', credits: 9000, text: 'Ein Eiskristall-Visier mit Raureifkante; ein Lichtfunke wandert darüber', rarity: 'rare', world: 'glacies', anim: 'glint' },
+    'ship-frost': { slot: 'ship', name: 'Frostkristall-Lack', icon: '❄', forge: 260, text: 'Eisblaue Hülle aus Kristallfacetten; ein Glanzlicht läuft über die Kanten', rarity: 'epic', world: 'glacies', anim: 'glint' },
+    'engine-crystal': { slot: 'engine', name: 'Kristallspur', icon: '💠', forge: 200, text: 'Dein Triebwerk lässt funkelnde Eiskristalle statt Funken zurück', rarity: 'rare', world: 'glacies', anim: 'shimmer' },
+    'stall-frost': { slot: 'stall', name: 'Raureif-Markise', icon: '🧊', forge: 150, text: 'Eisblaue Markise mit Eiszapfenkante und kühlen Kristalllichtern', rarity: 'rare', world: 'glacies', anim: 'glint' },
+    // Mekhanos: the technician's overall with a little gear on the chest that turns (faster at work)
+    'outfit-mekhanos': { slot: 'outfit', wear: 'suit', name: 'Mekhanos-Techniker', icon: '⚙', forge: 220, text: 'Stahlblauer Overall mit Nieten, Schulterplatten und einem Zahnrad, das sich bei der Arbeit dreht', rarity: 'epic', world: 'mekhanos', anim: 'gear' },
+    // the three remaining guardians' looks (free, once, when the guardian is beaten)
+    'acc-ember-bell': { slot: 'mochi', wear: 'back', name: 'Glutglöckchen', icon: '🔔', achievement: 'emberbell', text: 'Ein Halsband mit einem Glöckchen von Emberbell; in ihm glimmt Glut, es schwingt beim Laufen', rarity: 'epic', world: 'pyra', guardian: 'emberbell', anim: 'swing' },
+    'engine-clockwork': { slot: 'engine', name: 'Uhrwerk-Spur', icon: '⚙', achievement: 'cogsworth', text: 'Kleine goldene Zahnräder tanzen im Takt hinter deinem Schiff', rarity: 'epic', world: 'mekhanos', guardian: 'cogsworth', anim: 'tick' },
+    'acc-petal-crown': { slot: 'mochi', wear: 'head', name: 'Blütenkranz', icon: '🌺', achievement: 'petalguard', text: 'Petalguards Blüten als Kranz; die Blätter wiegen sich im Wind', rarity: 'epic', world: 'viridia', guardian: 'petalguard', anim: 'sway' },
+    // Geschoss-Spur (new weapon-effect slot): an ornament that follows each shot – the projectile keeps its chassis shape
+    // and its affinity colour (a lance stays a lance)
+    'shot-stardust': { slot: 'shot', name: 'Sternschnuppen-Spur', icon: '🌠', forge: 160, text: 'Kleine Sterne folgen jedem deiner Schüsse', rarity: 'rare', anim: 'shimmer' },
+    'shot-petal': { slot: 'shot', name: 'Blütenblatt-Spur', icon: '🌸', credits: 30000, text: 'Rosa Blütenblätter wirbeln hinter deinen Schüssen her', rarity: 'rare', world: 'viridia', anim: 'sway' },
+    // Profile frames (the frame slot prepared in P1.2): around your profile picture in the collection album
+    'frame-star': { slot: 'frame', name: 'Sternenrahmen', icon: '⭐', credits: 2500, text: 'Ein goldener Rahmen mit fünf kleinen Sternen', rarity: 'common' },
+    'frame-aurora': { slot: 'frame', name: 'Polarlicht-Rahmen', icon: '🌌', reward: 'set-glacies', text: 'Ein Rahmen, in dem langsam Polarlicht wandert – für das komplette Glacies-Forscherset', rarity: 'legendary', world: 'glacies', anim: 'shimmer' },
+    // ----- P1.5 Cosmetics 2.1: vehicles, a second building, the first planet decoration, the world sets' rewards -----
+    // Fahrzeug-Lack (new slot): the paint of every vehicle you already have – the cart line's carts, rovers, trains and
+    // maglev pods, the porters' carriers (each world keeps its sled, heat cart, robot cart or basket) and the mine carts.
+    // No extra vehicle is drawn; a look only paints the ones the economy moves.
+    'vehicle-mint': { slot: 'vehicle', name: 'Minz-Flotte', icon: '🚃', credits: 8000, text: 'Mintgrün mit cremefarbenem Streifen – jede Lore, jeder Rover und jeder Karren', rarity: 'common' },
+    'vehicle-ember': { slot: 'vehicle', name: 'Glutlack-Flotte', icon: '🚂', forge: 180, text: 'Basaltschwarz mit Glutnähten, die glimmen, solange das Fahrzeug Ladung trägt', rarity: 'rare', world: 'pyra', anim: 'glint' },
+    'vehicle-brass': { slot: 'vehicle', name: 'Messing-Flotte', icon: '⚙', credits: 20000, text: 'Poliertes Messing mit Nieten und einem Zahnrad, das sich nur dreht, wenn das Fahrzeug fährt', rarity: 'rare', world: 'mekhanos', anim: 'gear' },
+    // Lagerhaus (the second building slot, like the stall): the depot's roof on every planet
+    'depot-brass': { slot: 'depot', name: 'Messingdach', icon: '🏭', credits: 22000, text: 'Ein Messingdach mit Lüfterrad – es dreht sich, während Ware ins Lager rollt', rarity: 'rare', world: 'mekhanos', anim: 'gear' },
+    'depot-blossom': { slot: 'depot', name: 'Blütendach', icon: '🌸', forge: 170, text: 'Ein Dach aus rosa Blütenschindeln, in denen sich Blätter im Wind wiegen', rarity: 'rare', world: 'viridia', anim: 'sway' },
+    // Planeten-Deko (new slot, saved per world): you set it up on the planet you are on; every planet keeps its own
+    'decor-fountain': { slot: 'decor', name: 'Katzenbrunnen', icon: '⛲', credits: 12000, text: 'Eine kleine Katzenstatue, die Wasser spuckt – auf Glacies gefroren, auf Pyra dampfend', rarity: 'common' },
+    'decor-bloomarch': { slot: 'decor', name: 'Blütenbogen', icon: '🌺', reward: 'set-viridia', text: 'Ein Rosenbogen aus Viridia, dessen Blüten sich bei Tag öffnen – für das komplette Viridia-Gartenset', rarity: 'epic', world: 'viridia', anim: 'sway' },
+    'frame-ember': { slot: 'frame', name: 'Glutrahmen', icon: '🔥', reward: 'set-pyra', text: 'Ein Rahmen aus Basalt, aus dessen Rissen Funken steigen – für das komplette Pyra-Glutset', rarity: 'legendary', world: 'pyra', anim: 'glint' },
+    'frame-gear': { slot: 'frame', name: 'Uhrwerkrahmen', icon: '⚙', reward: 'set-mekhanos', text: 'Ein Zahnkranz, der im Takt um dein Bild läuft – für das komplette Mekhanos-Werkset', rarity: 'legendary', world: 'mekhanos', anim: 'gear' },
+    'frame-guardian': { slot: 'frame', name: 'Wächterkranz', icon: '👑', reward: 'set-guardians', text: 'Die Zeichen aller fünf Wächter umkreisen dein Bild – für alle fünf Wächter-Trophäen', rarity: 'mythic', guardian: 'all', anim: 'shimmer' }
   });
+  // P1.2 — ONE cosmetic structure for the whole game: every look belongs to a domain and a slot. A slot holds one look
+  // (meta.equipped[slot]; kitten wear per character in meta.wardrobe). Role uniforms are not cosmetics (scenes/kittens.js
+  // ROLES, never sold, never in this list). Sources say how a look is earned; a later shop or free reward reuses the same
+  // ids and ownership list (docs/p1-2-mobile-ux/COSMETICS.md). P1.4: the Geschoss-Spur joins the weapon effects, the
+  // profile frame has its first looks (docs/p1-4-cosmetics-collection/COSMETICS.md).
+  const COSMETIC_DOMAINS = Object.freeze([
+    { id: 'kitten', name: 'Kätzchen', slots: ['mochi', 'outfit'] },
+    { id: 'ship', name: 'Schiff', slots: ['ship', 'decal', 'engine'] },
+    { id: 'weapon', name: 'Waffen-Effekte', slots: ['muzzle', 'shot', 'impact'] },
+    { id: 'companion', name: 'Begleiter', slots: ['glider', 'trail'] },
+    { id: 'world', name: 'Welt', slots: ['colony', 'stall', 'depot', 'mine', 'vehicle', 'decor', 'ring'] },
+    { id: 'profile', name: 'Profil', slots: ['frame'] }
+  ]);
+  const COSMETIC_SLOT_NAMES = Object.freeze({
+    mochi: 'Kätzchen-Accessoire',
+    outfit: 'Outfit',
+    ship: 'Lackierung',
+    decal: 'Hüllen-Signatur',
+    engine: 'Triebwerksspur',
+    muzzle: 'Mündungsblitz',
+    shot: 'Geschoss-Spur',
+    impact: 'Trefferfunken',
+    glider: 'Tikkis Gleiter',
+    trail: 'Drohnenspur',
+    colony: 'Kolonie-Deko',
+    stall: 'Marktstand',
+    depot: 'Lagerhaus',
+    vehicle: 'Fahrzeug-Lack',
+    decor: 'Planeten-Deko',
+    mine: 'Minen-Deko',
+    ring: 'Planetenring',
+    frame: 'Profilrahmen'
+  });
+  // what a look of a slot fits on (the shop and the album say it)
+  const COSMETIC_FITS = Object.freeze({
+    mochi: 'Jedes Kätzchen im Studio',
+    outfit: 'Jedes Kätzchen im Studio',
+    ship: 'Alle 6 Schiffsmodelle',
+    decal: 'Alle 6 Schiffsmodelle',
+    engine: 'Alle 6 Schiffsmodelle',
+    muzzle: 'Jede Waffe',
+    shot: 'Jede Waffe',
+    impact: 'Jede Waffe',
+    glider: 'Tikkis Gleiter',
+    trail: 'Deine Drohnen',
+    colony: 'Deine Kolonie',
+    stall: 'Der Marktstand jedes Planeten',
+    depot: 'Das Lagerhaus jedes Planeten',
+    vehicle: 'Loren, Rover, Züge, Karren und Grubenwagen',
+    decor: 'Ein Planet deiner Wahl (jeder Planet behält seine)',
+    mine: 'Deine Mine',
+    ring: 'Dein Heimatplanet',
+    frame: 'Dein Profilbild'
+  });
+  const EQUIP_SLOTS = Object.freeze(['ship', 'ring', 'trail', 'mochi', 'glider', 'impact', 'engine', 'outfit', 'colony', 'mine', 'decal', 'muzzle', 'frame', 'stall', 'shot', 'vehicle', 'depot', 'decor']);
+  // P1.4: rarity is design quality, not more particles (docs/p1-4-cosmetics-collection/COSMETICS.md):
+  //   common: a clean look · rare: an extra detail and a better material · epic: a design feature of its own ·
+  //   legendary: a unique design with its own animation · mythic: an exceptional, controlled signature
+  const COSMETIC_RARITIES = Object.freeze({
+    common: { name: 'Gewöhnlich', rank: 0, color: '#c9c3ee' },
+    rare: { name: 'Selten', rank: 1, color: '#8fe3ff' },
+    epic: { name: 'Episch', rank: 2, color: '#c4a3ff' },
+    legendary: { name: 'Legendär', rank: 3, color: '#ffd77a' },
+    mythic: { name: 'Mythisch', rank: 4, color: '#ff9ecb' }
+  });
+  const COSMETIC_WORLDS = Object.freeze({ orion: 'Orion', glacies: 'Glacies', pyra: 'Pyra', mekhanos: 'Mekhanos', viridia: 'Viridia' });
+  const COSMETIC_GUARDIANS = Object.freeze({ pips: 'P.I.P.S.', frostbyte: 'Frostbyte', emberbell: 'Emberbell', cogsworth: 'Cogsworth', petalguard: 'Petalguard' });
+  // One set registry. A `bundle` set is forged at once for 80 % of its missing pieces (Beta 1.3 Sets tab); a collection
+  // set is completed by owning its pieces – however they were earned – and gives its `reward` (a look, never a value)
+  // once. No set is needed for anything but its reward.
+  const COSMETIC_SETS = Object.freeze([
+    { id: 'set-sakura', name: 'Kirschblüten-Set', icon: '🌸', items: ['ship-sakura', 'outfit-rose', 'glider-blossom'], text: 'Schiff, Mochi und Tikkis Gleiter in Kirschblüte', bundle: 0.8 },
+    { id: 'set-miner', name: 'Grubenlicht-Set', icon: '💎', items: ['mine-crystal-lamps', 'outfit-explorer', 'deco-lanterns'], text: 'Kristalllampen in der Mine, Laternen über der Kolonie, Mochi im Forscher-Overall', bundle: 0.8, world: 'orion' },
+    { id: 'set-glacies', name: 'Glacies-Forscherset', icon: '❄', items: ['outfit-glacies', 'acc-frost-visor', 'ship-frost', 'engine-crystal', 'impact-frost', 'stall-frost'], text: 'Frostanzug und Visier, Kristall-Lack und Kristallspur, Frostbytes Splitter und die Raureif-Markise', reward: 'frame-aurora', world: 'glacies' },
+    { id: 'set-guardians', name: 'Wächter-Trophäen', icon: '👑', items: ['decal-pips', 'impact-frost', 'acc-ember-bell', 'engine-clockwork', 'acc-petal-crown'], text: 'Je ein Look von jedem der fünf Wächter – nur durch Siege', reward: 'frame-guardian' },
+    // P1.5: a set for each remaining world, each with a look as its reward (shown in the album's world areas)
+    { id: 'set-pyra', name: 'Pyra-Glutset', icon: '🌋', items: ['outfit-pyra', 'ship-ember', 'acc-ember-bell', 'vehicle-ember'], text: 'Mechaniker-Anzug, Glut-Lackierung, Emberbells Glöckchen und die Glutlack-Flotte', reward: 'frame-ember', world: 'pyra' },
+    { id: 'set-mekhanos', name: 'Mekhanos-Werkset', icon: '⚙', items: ['outfit-mekhanos', 'engine-clockwork', 'vehicle-brass', 'depot-brass'], text: 'Techniker-Overall, Cogsworths Uhrwerk-Spur, Messing-Flotte und Messingdach', reward: 'frame-gear', world: 'mekhanos' },
+    { id: 'set-viridia', name: 'Viridia-Gartenset', icon: '🌿', items: ['outfit-viridia', 'acc-petal-crown', 'shot-petal', 'depot-blossom'], text: 'Botaniker-Kittel, Petalguards Blütenkranz, Blütenblatt-Spur und Blütendach', reward: 'decor-bloomarch', world: 'viridia' }
+  ]);
+  // the album's areas: the five planets, the guardians, then the kinds of looks (each look shows in every area it fits)
+  const COLLECTION_AREAS = Object.freeze([
+    { id: 'orion', name: 'Orion', icon: '🪐', has: item => item.world === 'orion' },
+    { id: 'glacies', name: 'Glacies', icon: '❄', has: item => item.world === 'glacies' },
+    { id: 'pyra', name: 'Pyra', icon: '🌋', has: item => item.world === 'pyra' },
+    { id: 'mekhanos', name: 'Mekhanos', icon: '⚙', has: item => item.world === 'mekhanos' },
+    { id: 'viridia', name: 'Viridia', icon: '🌿', has: item => item.world === 'viridia' },
+    { id: 'guardians', name: 'Wächter', icon: '👑', has: item => Boolean(item.guardian) },
+    { id: 'ships', name: 'Raumschiffe', icon: '🚀', has: item => ['ship', 'decal', 'engine', 'muzzle', 'shot', 'impact'].includes(item.slot) },
+    { id: 'kittens', name: 'Kätzchen', icon: '🐾', has: item => ['mochi', 'outfit'].includes(item.slot) },
+    { id: 'world', name: 'Kolonie & Profil', icon: '🏡', has: item => ['glider', 'trail', 'colony', 'stall', 'mine', 'ring', 'frame'].includes(item.slot) },
+    // P1.5: the buildings, vehicles and decorations of the planets
+    { id: 'decor', name: 'Bauten & Deko', icon: '🏗', has: item => ['stall', 'depot', 'vehicle', 'decor', 'colony', 'mine'].includes(item.slot) }
+  ]);
+  function cosmeticDomain(id) {
+    const slot = COSMETICS[id]?.slot;
+    return COSMETIC_DOMAINS.find(d => d.slots.includes(slot)) || null;
+  }
+  // how a look is earned (the shop, the forge and the studio show it; nothing here grants or charges)
+  function cosmeticSource(id) {
+    const item = COSMETICS[id];
+    if (!item) return null;
+    if (item.credits) return { kind: 'credits', amount: item.credits };
+    if (item.gems) return { kind: 'gems', amount: item.gems };
+    if (item.forge) return { kind: 'forge', amount: item.forge };
+    if (item.achievement) return { kind: 'achievement', id: item.achievement };
+    if (item.reward) return { kind: 'set', id: item.reward };
+    if (WELCOME_POOL.includes(id)) return { kind: 'welcome' };
+    if (SEASON_THEMES.some(t => t.cosmetics.includes(id))) return { kind: 'season' };
+    return { kind: 'store' };
+  }
+  // P1.4 (§ 11): the five kinds of source, kept apart for a fair later shop. Only `currency` costs something today (in
+  // currencies earned by playing); `premium` are the old package looks – real money stays off (store and ads `none`).
+  const SOURCE_GROUPS = Object.freeze({
+    reward: { name: 'Gratis-Belohnung', kinds: ['welcome', 'set'] },
+    currency: { name: 'Mit Spielwährung', kinds: ['credits', 'gems', 'forge'] },
+    achievement: { name: 'Erfolg', kinds: ['achievement'] },
+    event: { name: 'Event', kinds: ['season'] },
+    premium: { name: 'Premium (abgeschaltet)', kinds: ['store'] }
+  });
+  function cosmeticSourceGroup(id) {
+    const kind = cosmeticSource(id)?.kind;
+    return Object.keys(SOURCE_GROUPS).find(g => SOURCE_GROUPS[g].kinds.includes(kind)) || null;
+  }
+  const cosmeticRarity = id => (COSMETIC_RARITIES[COSMETICS[id]?.rarity] ? COSMETICS[id].rarity : 'common');
+  // the sets a look belongs to (a look may be in more than one: Frostsplitter is Glacies and a guardian trophy)
+  const cosmeticSets = id => COSMETIC_SETS.filter(s => s.items.includes(id));
+  // the one data model of a look (§ 2.1): everything the shop, the album, the studios and the reveal show
+  function cosmeticInfo(id, meta) {
+    const item = COSMETICS[id];
+    if (!item) return null;
+    const owned = Boolean(meta?.cosmetics?.includes(id)),
+      worn = item.wear ? Object.values(meta?.wardrobe?.chars || {}).some(c => c?.[item.wear] === id) : meta?.equipped?.[item.slot] === id;
+    return {
+      id,
+      name: item.name,
+      icon: item.icon,
+      text: item.text || '',
+      domain: cosmeticDomain(id)?.id || null,
+      slot: item.slot,
+      wear: item.wear || null,
+      slotName: COSMETIC_SLOT_NAMES[item.slot] || item.slot,
+      rarity: cosmeticRarity(id),
+      source: cosmeticSource(id),
+      group: cosmeticSourceGroup(id),
+      world: item.world || null,
+      guardian: item.guardian || null,
+      sets: cosmeticSets(id).map(s => s.id),
+      fits: COSMETIC_FITS[item.slot] || '',
+      anim: item.anim || null,
+      owned,
+      equipped: owned && worn
+    };
+  }
+  // a collection set's state: owned pieces, complete, reward granted (meta.wardrobe.granted is the one "given once" list)
+  function setProgress(set, meta) {
+    const have = set.items.filter(id => meta?.cosmetics?.includes(id)).length;
+    return { have, total: set.items.length, complete: have === set.items.length, rewarded: Boolean(set.reward && meta?.wardrobe?.granted?.includes(set.reward)) };
+  }
   // Free welcome capsule: one equal-probability draw per save identity, never sold, never rerolled.
+  const WARDROBE_CHARS = Object.freeze(['mochi', 'void', 'boba', 'pip']);
+  const WEAR_SLOTS = Object.freeze(['head', 'suit', 'face', 'back']);
   const WELCOME_POOL = Object.freeze(['acc-star-helmet', 'acc-mint-scarf', 'acc-star-backpack', 'acc-cute-antenna', 'acc-explorer-goggles', 'acc-moon-patch']);
   const GUARDIAN_STAGES = ['locked', 'warned', 'battle', 'defeated', 'repaired'];
 
@@ -190,7 +418,10 @@
       entitlements: {},
       cosmetics: [],
       cosmeticsUnknown: [], // Beta 1.2: ids a newer build knows — kept, never shown, restored once known
-      equipped: { ship: null, ring: null, trail: null, mochi: null, glider: null, impact: null, engine: null },
+      equipped: { ship: null, ring: null, trail: null, mochi: null, glider: null, impact: null, engine: null, decal: null, muzzle: null, frame: null, stall: null, shot: null, vehicle: null, depot: null, decor: null },
+      decor: {}, // P1.5: the planet decoration per world (planet index -> look id); equipped.decor mirrors the viewed planet
+      // P1: what each kitten wears (ownership stays account-wide in meta.cosmetics); granted = achievement looks given
+      wardrobe: { chars: emptyWardrobe(), granted: [], hint: false },
       welcome: null, // { item, at }
       guardians: { pips: { stage: 'locked', drones: 0, hp: 0, maxHp: 0, fightStart: 0 } },
       story: { journal: [], liberated: [] },
@@ -221,10 +452,16 @@
     const unknownIds = [...(Array.isArray(raw.cosmetics) ? raw.cosmetics : []), ...(Array.isArray(raw.cosmeticsUnknown) ? raw.cosmeticsUnknown : [])].filter(id => typeof id === 'string' && id.length <= 40);
     for (const id of unknownIds) if (COSMETICS[id] && !meta.cosmetics.includes(id)) meta.cosmetics.push(id);
     meta.cosmeticsUnknown = [...new Set(unknownIds.filter(id => !COSMETICS[id]))].slice(0, 100);
-    for (const slot of ['ship', 'ring', 'trail', 'mochi', 'glider', 'impact', 'engine', 'outfit', 'colony', 'mine']) {
+    for (const slot of EQUIP_SLOTS) {
       const id = raw.equipped?.[slot];
       meta.equipped[slot] = meta.cosmetics.includes(id) && COSMETICS[id]?.slot === slot ? id : null;
     }
+    // P1.5: the planet decoration of each world (an owned decor look or nothing); unknown planets are dropped
+    meta.decor = {};
+    if (raw.decor && typeof raw.decor === 'object' && !Array.isArray(raw.decor))
+      for (const [planet, id] of Object.entries(raw.decor)) if (/^[0-9]{1,2}$/.test(planet) && meta.cosmetics.includes(id) && COSMETICS[id]?.slot === 'decor') meta.decor[planet] = id;
+    meta.decorAt = Number.isInteger(raw.decorAt) && raw.decorAt >= 0 && raw.decorAt < 100 ? raw.decorAt : null;
+    normalizeWardrobe(meta, raw);
     meta.boostTokens = Math.max(0, Math.min(999, Math.floor(Number(raw.boostTokens) || 0)));
     if (raw.ads && typeof raw.ads === 'object')
       for (const key of Object.keys(PLACEMENTS)) {
@@ -262,6 +499,45 @@
     // Beta 1.4: sections of a newer build (unknown keys) are kept as they are — the game modules normalise their own
     for (const [key, value] of Object.entries(raw)) if (!(key in meta) && key.length <= 40) meta[key] = value;
     return meta;
+  }
+
+  // ----- P1 wardrobe: four slots per character, migrated from the single Mochi slots of Beta 1.x -----
+  function emptyWardrobe() {
+    const chars = {};
+    for (const c of WARDROBE_CHARS) chars[c] = { head: null, suit: null, face: null, back: null };
+    return chars;
+  }
+  const wearable = (meta, id, slot) => typeof id === 'string' && meta.cosmetics.includes(id) && COSMETICS[id]?.wear === slot;
+  function normalizeWardrobe(meta, raw) {
+    const w = { chars: emptyWardrobe(), granted: [], hint: false },
+      src = raw.wardrobe && typeof raw.wardrobe === 'object' ? raw.wardrobe : null;
+    if (src?.chars && typeof src.chars === 'object') {
+      for (const c of WARDROBE_CHARS) for (const slot of WEAR_SLOTS) if (wearable(meta, src.chars[c]?.[slot], slot)) w.chars[c][slot] = src.chars[c][slot];
+    } else {
+      // migration from Beta 1.x: Mochi's accessory slot and the outfit slot become Mochi's head/face/back and suit
+      const acc = raw.equipped?.mochi,
+        outfit = raw.equipped?.outfit;
+      if (typeof acc === 'string' && COSMETICS[acc]?.wear && wearable(meta, acc, COSMETICS[acc].wear)) w.chars.mochi[COSMETICS[acc].wear] = acc;
+      if (wearable(meta, outfit, 'suit')) w.chars.mochi.suit = outfit;
+    }
+    if (Array.isArray(src?.granted)) w.granted = [...new Set(src.granted.filter(id => typeof id === 'string' && id.length <= 40))].slice(0, 50);
+    w.hint = src?.hint === true;
+    meta.wardrobe = w;
+    syncLegacyEquipped(meta);
+    return w;
+  }
+  // The Beta 1.x slots mirror Mochi, so an older build reading this save still shows Mochi's look: the first
+  // accessory Mochi wears (head, face, back) and the outfit.
+  function syncLegacyEquipped(meta) {
+    const m = meta.wardrobe?.chars?.mochi;
+    if (!m) return;
+    meta.equipped.mochi = [m.head, m.face, m.back].find(id => id && COSMETICS[id]?.slot === 'mochi') || null;
+    meta.equipped.outfit = m.suit && COSMETICS[m.suit]?.slot === 'outfit' ? m.suit : null;
+  }
+  // a cosmetic leaves every kitten that wears it (refund of a package)
+  function unwearEverywhere(meta, id) {
+    for (const c of Object.values(meta.wardrobe?.chars || {})) for (const slot of WEAR_SLOTS) if (c[slot] === id) c[slot] = null;
+    syncLegacyEquipped(meta);
   }
 
   const product = id => CATALOG.find(item => item.id === id) || null;
@@ -319,6 +595,8 @@
     for (const id of item.grants.cosmetics || []) {
       meta.cosmetics = meta.cosmetics.filter(owned => owned !== id);
       for (const slot of Object.keys(meta.equipped)) if (meta.equipped[slot] === id) meta.equipped[slot] = null;
+      for (const planet of Object.keys(meta.decor || {})) if (meta.decor[planet] === id) delete meta.decor[planet];
+      unwearEverywhere(meta, id);
     }
     return true;
   }
@@ -635,6 +913,26 @@
     CATALOG,
     COSMETICS,
     WELCOME_POOL,
+    WARDROBE_CHARS,
+    WEAR_SLOTS,
+    syncLegacyEquipped,
+    COSMETIC_DOMAINS,
+    COSMETIC_RARITIES,
+    COSMETIC_WORLDS,
+    COSMETIC_GUARDIANS,
+    COSMETIC_SETS,
+    COSMETIC_FITS,
+    COLLECTION_AREAS,
+    SOURCE_GROUPS,
+    cosmeticSourceGroup,
+    cosmeticRarity,
+    cosmeticSets,
+    cosmeticInfo,
+    setProgress,
+    COSMETIC_SLOT_NAMES,
+    EQUIP_SLOTS,
+    cosmeticDomain,
+    cosmeticSource,
     SEASON_THEMES,
     PLACEMENTS,
     SEASON_TIERS,

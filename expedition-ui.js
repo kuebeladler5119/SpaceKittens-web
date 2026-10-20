@@ -407,7 +407,7 @@ function expResultHTML() {
     gstage = state.meta.guardians?.[CAMPAIGNS[r.key].guardian]?.stage,
     objective = r.won && r.boss ? gdef?.after || '' : next === 'boss' ? 'Alle Wellen geschafft: der Wächter ' + (EXP_BOSS[r.key]?.name || '') + ' wartet.' : next === 'wave' ? 'Nächstes Ziel: ' + expTargetName() : gdef?.notYet && !['defeated', 'repaired'].includes(gstage) ? 'Alle Wellen geschafft. ' + gdef.notYet : 'Feldzug abgeschlossen.';
   return `<div class="exp-result-card ${r.won ? 'won' : 'lost'}"><small>${expPlanet(r.key).toUpperCase()} · ${r.boss ? 'WÄCHTER' : 'WELLE ' + (r.wave + 1)}</small><h2>${headline}</h2><b>${name}</b>
-    <p class="exp-facts"><span>⚔ ${r.stats.kills} besiegt</span><span>⏱ ${r.stats.seconds} s</span><span>${r.stats.abilities} Fähigkeit${r.stats.abilities === 1 ? '' : 'en'}</span></p>
+    <p class="exp-facts"><span>⚔ ${r.stats.kills} besiegt</span><span>⏱ ${r.stats.seconds} s</span><span>${r.stats.abilities} Fähigkeit${r.stats.abilities === 1 ? '' : 'en'}</span>${r.stats.proj ? `<span>🎯 ${Math.round(100 * Math.max(0, 1 - (r.stats.misses || 0) / r.stats.proj))} % Treffer</span>` : ''}</p>
     ${rewards.length ? `<p class="exp-rewards">${rewards.join(' · ')}${r.first ? ' · Erstabschluss' : ''}</p>` : r.won ? '<p class="exp-rewards">Schon einmal geschafft – keine zweite Belohnung.</p>' : '<p class="exp-rewards">Nichts gewonnen, nichts verloren außer Hülle. Die Welle wartet.</p>'}
     <div class="exp-damage"><small>Hülle ${fmt(r.hullStart)} → ${fmt(r.hullEnd)} (−${fmt(lost)}) · ${pct} %</small><i><u style="width:${pct}%"></u></i></div>
     ${r.analysis ? defeatHTML(r.analysis) : ''}

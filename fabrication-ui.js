@@ -258,7 +258,7 @@ render();
 
 // Beta 1.4 M7: the colony scene shows the Fertigung bench next to the refinery (real orders: what is in work, its
 // progress, a full output store, the goods on the shelf). View data only; the scene draws it.
-const FAB_GOOD_COLOR = { scrap: '#9aa2c4', water: '#8fe3ff', plating: '#c4cbe4', coolant: '#7fdcff', repairKit: '#ff8fb0', hullModule: '#ffd77a' };
+const FAB_GOOD_COLOR = { scrap: '#9aa2c4', water: '#8fe3ff', plating: '#c4cbe4', coolant: '#7fdcff', repairKit: '#ff8fb0', hullModule: '#ffd77a', coldPlate: '#bfefff', cryoCore: '#8ff0ff', heatShield: '#ff9e5a', resonanceLens: '#e2d4ff', shieldProjector: '#8ff0d4' };
 const colonyViewBeforeFab = window.NebulaView.colony;
 window.NebulaView.colony = () => {
   const view = colonyViewBeforeFab(),
@@ -266,14 +266,18 @@ window.NebulaView.colony = () => {
   if (!fabOpen(planet)) return view;
   const fab = state.colonies[planet].fab,
     loaded = fab.orders.filter(o => o.loaded && RECIPES[o.recipe]).slice(0, 3),
-    speed = fabSpeed(planet);
+    speed = fabSpeed(planet),
+    age = Math.min(1.2, Math.max(0, (Date.now() - (industryFlow[planet]?.at || Date.now())) / 1000));
   return {
     ...view,
     fab: {
-      work: loaded.map(o => ({ color: FAB_GOOD_COLOR[Object.keys(RECIPES[o.recipe].out)[0]] || '#ffffff', progress: Math.min(1, o.progress / (RECIPES[o.recipe].seconds / speed)), blocked: o.progress >= RECIPES[o.recipe].seconds / speed - 1e-9 && !outputRoom(o.recipe, planet) })),
+      // Beta 1.9 M3: elapsed (s of work) and the raw the batch took from the depot – a porter carries exactly that raw
+      // to the bench in the batch's first seconds (the material left the depot when the batch loaded)
+      work: loaded.map(o => ({ color: FAB_GOOD_COLOR[Object.keys(RECIPES[o.recipe].out)[0]] || '#ffffff', progress: Math.min(1, o.progress / (RECIPES[o.recipe].seconds / speed)), elapsed: Math.min(RECIPES[o.recipe].seconds / speed, o.progress + age), seconds: RECIPES[o.recipe].seconds / speed, raw: RECIPES[o.recipe].in.raw || 0, id: o.id, blocked: o.progress >= RECIPES[o.recipe].seconds / speed - 1e-9 && !outputRoom(o.recipe, planet) })),
       shelf: GOOD_IDS.filter(id => GOODS[id].kind !== 'raw' && fabStock(planet, id) > 0).map(id => ({ color: FAB_GOOD_COLOR[id], n: Math.min(3, Math.ceil(fabStock(planet, id) / 5)) })),
       managed: fabManaged(planet),
-      orders: fab.orders.length
+      orders: fab.orders.length,
+      lines: fabLines(planet) // Beta 1.9 M1: research (Zusatzfließband) adds a line – the Werkstatt shows a second belt
     }
   };
 };

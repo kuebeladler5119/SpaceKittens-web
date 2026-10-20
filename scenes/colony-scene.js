@@ -35,8 +35,41 @@
   const MINE_SLOTS = [-1.6, 3.15, 1.5]; // left flank of the vein, at the pile (loading the cart), right flank (Beta 1.3: computed below)
   const HELPER_SIZE = 0.82; // front-lane helper scale (k)
   const ZOOM_OVERVIEW = 0.62; // Beta 1.6: the overview camera (Übersicht) relative to the detail view
+  // Beta 1.8 A1: the camera's fling. The finger's speed over its last FLING_WINDOW ms (not one move event, which made
+  // the old fling frame-rate dependent and short) carries the camera on and slows down with FLING_FRICTION per second
+  // (distance ≈ speed / friction). A slow release does not fling.
+  const FLING_WINDOW = 100,
+    FLING_FRICTION = 3.2,
+    FLING_MIN = 220,
+    FLING_MAX = 5200;
+  // the camera's place per planet, kept across screen changes and reloads (the session, in world kitten units)
+  const CAM_KEY = 'sk-colony-cam';
+  function camMemory() {
+    try {
+      return JSON.parse(sessionStorage.getItem(CAM_KEY) || '{}') || {};
+    } catch {
+      return {};
+    }
+  }
+  function camRemember(planet, centreK) {
+    try {
+      const m = camMemory();
+      m[planet] = Math.round(centreK * 100) / 100;
+      sessionStorage.setItem(CAM_KEY, JSON.stringify(m));
+    } catch {}
+  }
   // resting helpers stand in one row in front of their quarters, a full body width apart (never stacked)
-  const REST_SLOTS = [-2.3, -1.15, 0, 1.15, 2.3, 3.45];
+  // P1.2: …not in a row any more: each rest spot has its own pause – one sits on a crate, two chat face to face, one
+  // sits in the grass looking at the sky, one tinkers at a toolbox, one dozes – at irregular distances and depths
+  const REST_SPOTS = [
+    { at: -2.35, dy: -0.16, act: 'crate', face: 1 },
+    { at: -1.2, dy: -0.08, act: 'chat', face: 1 },
+    { at: -0.42, dy: -0.13, act: 'chat', face: -1 },
+    { at: 1.05, dy: -0.19, act: 'gaze', face: -1 },
+    { at: 2.3, dy: -0.1, act: 'tinker', face: -1 },
+    { at: 3.45, dy: -0.15, act: 'nap', face: 1 }
+  ];
+  const REST_SLOTS = REST_SPOTS.map(r => r.at);
 
   function createColonyScene({ getView, events, actions = {} }) {
     let w = 360,
@@ -52,7 +85,7 @@
       view = null,
       planetId = 'crystal',
       L = Layouts.layoutFor('crystal');
-    const cam = { x: 0, target: 0, vel: 0 };
+    const cam = { x: 0, target: 0, vel: 0, fling: 0, saved: 0 };
     const particles = new ParticlePool(140);
     const floaters = [];
     const construction = new Map();
@@ -68,6 +101,21 @@
     const stats = { harvestEvents: 0, upgradeEvents: 0, taps: 0, drags: 0, lastFloaterValue: 0, sales: 0, trips: 0, hires: 0 };
     const hits = [];
     const layerCache = new Map();
+    // P1.2: the mini inspector – a tapped worker waves and shows its name tag for a moment (presentation only)
+    const inspect = { id: null, until: 0, card: null, x: 0, y: 0, seen: false };
+    const workerHits = [];
+    function workerHit(id, x, top, card) {
+      // the kitten's own body (head to feet, its width): a worker standing in front of its building is tapped itself;
+      // the building answers everywhere else
+      workerHits.push({ x0: x - 0.3 * k, y0: top + 0.05 * k, x1: x + 0.3 * k, y1: top + 1.05 * k, type: 'worker', key: id, card });
+      if (inspect.id === id) {
+        inspect.x = x;
+        inspect.y = top;
+        inspect.seen = true;
+      }
+    }
+    const inspected = id => inspect.id === id && time < inspect.until;
+    const greeting = id => inspected(id) && inspect.until - time > 2.6;
 
     const hasPlot = key => L.plots[key] !== undefined && L.plots[key] > 0;
     function plotX(key) {
@@ -86,7 +134,16 @@
       trackEnd = () => plotX(L.track.to) + L.track.toOffset * k;
     // Beta 1.3: while helpers mine at the vein's left flank Mochi waits on the free side (between the right flank and
     // the loader at the pile) instead of standing in front of the outcrop next to them
-    const mochiHome = () => (helpers?.[0]?.working && L.mochi.plot === 'mine' ? plotX('mine') + 2.3 * k * mineDir() : plotX(L.mochi.plot) + L.mochi.offset * k);
+    const mochiHome = () => {
+      let x = helpers?.[0]?.working && L.mochi.plot === 'mine' ? plotX('mine') + 2.3 * k * mineDir() : plotX(L.mochi.plot) + L.mochi.offset * k;
+      // P1: Mochi's waiting spot never sits on a working helper (a step aside instead of three kittens on one point)
+      for (let n = 0; n < 3; n++) {
+        const near = helpers?.find(hp => hp.working && Math.abs(hp.x - x) < 0.75 * k);
+        if (!near) break;
+        x = near.x + (x >= near.x ? 1 : -1) * 0.8 * k;
+      }
+      return x;
+    };
     // The mine faces its cart line: on worlds where the track runs left, the whole mine site is mirrored.
     const mineDir = () => (L.track.fromOffset >= 0 ? 1 : -1);
     let sized = false; // Beta 1.7: the first real size starts at Mochi; later resizes keep the view's centre
@@ -96,14 +153,31 @@
       // edges and the path between them, kittens still large (≈ 60 px on a 390 × 844 phone).
       // Beta 1.7: a tall phone world (the full-screen colony) gets slightly larger kittens and its ground line moves up,
       // so the extra height becomes foreground (paths, carts, kittens) instead of empty sky
-      const tall = w < 560 && h > w * 1.15;
-      k = math.clamp(w >= 560 ? Math.min(h * 0.14, w / 12) : Math.min(h * 0.165, w / (tall ? 5.2 : 5.6)), 32, tall ? 72 : 66);
+      // Beta 1.8 A1: a tall phone shows about 6.4 kitten widths (was 5.2): a station and most of its neighbour, kittens
+      // still ≥ 50 px on a 320-px phone; together with the compact layouts the colony is 7–8 screens instead of 12–13
+      // P1.2 composition: the colony is the picture, not the sky. A tall phone shows 5.3 kitten widths (was 6.4: the
+      // world read small, 60 % of the stage was sky) and its ground line sits at about 65 % of the stage (was 78 %), so
+      // the deeper foreground carries paths, props and the scene bar; wide screens show 10.5–13.5 widths with kittens up
+      // to 88 px and the ground at 79 %. The space left above is filled by the far colony layer (drawBackground), not by emptiness.
+      // (a tablet held upright is tall too: 7.5 widths with the same deep foreground, not 60 % sky as before)
+      const tall = h > w * 1.15,
+        tablet = tall && w >= 560;
+      // (wide: kittens up to 88 px – before, a cap of 66 px kept the desktop colony small under 57 % sky; a short landscape
+      // stage keeps its larger share of the height)
+      k = math.clamp(tablet ? Math.min(h * 0.14, w / 7.5) : w >= 560 ? Math.min(h * (h < 520 ? 0.15 : 0.12), w / 10.5) : Math.min(h * 0.165, w / 5.3), 32, tablet ? 96 : tall ? 78 : 88);
       // Beta 1.6: the overview shows about 1.6× as much of the colony (kittens stay ≥ 24 px)
       if (zoom === 'overview') k = Math.max(24, k * ZOOM_OVERVIEW);
-      groundY = tall ? h - math.clamp(2.6 * k, h * 0.2, h * 0.34) : h * 0.8;
+      // (a short landscape stage keeps the plaques under the ground line clear of the scene bar: 56 px + 0.8 k)
+      groundY = tall ? h - math.clamp(3.5 * k, h * 0.24, h * 0.36) : Math.min(h * 0.79, h - 56 - 0.8 * k);
       worldW = L.width * k;
       if (!mochi.x || mochi.x > worldW) mochi.x = mochiHome();
-      cam.x = cam.target = math.clamp(mochi.x - w * 0.42, 0, Math.max(0, worldW - w));
+      // Beta 1.8: the first layout of a planet returns to where the player last looked (this session), else to Mochi
+      // the start view centres the mine site (its pile and flank sit on the side away from the cart line), so the mine,
+      // Mochi and the start of the cart line are all in view – before, a narrow phone could open next to the mine
+      const kept = camMemory()[planetId],
+        start = plotX('mine') + mineDir() * 0.6 * k;
+      cam.x = cam.target = math.clamp(typeof kept === 'number' ? kept * k - w / 2 : start - w / 2, 0, Math.max(0, worldW - w));
+      cam.fling = 0;
       layerCache.clear();
     }
     // keeps the world point in the middle of the view where it is when the zoom changes
@@ -129,10 +203,21 @@
 
     // ----- Events -----
     const off = [];
+    // P1: Mochi reacts to discoveries (a find, a story discovery): big eyes first, then a happy hop with sparkles;
+    // a new look makes Mochi cheer. Only while Mochi is free (no walk, no action running).
+    const react = (action, seconds) => () => {
+      if (!shown || mochi.target !== null || mochi.actionTime > 0) return;
+      mochi.action = action;
+      mochi.actionTime = seconds;
+      mochi.idleTime = 0;
+    };
+    off.push(events.on('artifact', react('discover', 2.4)), events.on('discovery', react('discover', 2.4)), events.on('cosmetic-unlocked', react('cheer', 1.4)));
     off.push(
       events.on('harvest', event => {
         if (!shown) return;
         stats.harvestEvents++;
+        // Beta 1.8 A3: a tap on ABBAUEN shows the mine if it is out of view (the dock's step leads the camera)
+        if (!event.underground) ensureVisible(plotX('mine'));
         const dx = plotX('mine');
         mochi.idleTime = 0;
         // Beta 1.3: Mochi mines at a free flank of the outcrop (tool-tip contact) with hand tools, inspects from Lv 5
@@ -190,6 +275,7 @@
       events.on('transport', event => {
         if (!shown || !event.manual) return;
         stats.trips++;
+        if (!event.helper && (event.planet === undefined || event.planet === view?.planetIndex)) ensureVisible(hasPlot('rail') ? plotX('rail') : trackStart());
       })
     );
     off.push(
@@ -198,6 +284,7 @@
         stats.sales++;
         saleGlow = 1;
         const x = event.workplace === 'dock' ? plotX('dock') : plotX('stall');
+        if (event.manual && !event.helper) ensureVisible(x);
         const last = floaters[floaters.length - 1];
         if (last && last.unit === 'credits' && last.age < 0.8 && Math.abs(last.x - x) < 5) {
           last.value += event.credits;
@@ -235,7 +322,11 @@
       canvas.addEventListener('pointerdown', e => {
         // Beta 1.7: in the full-screen phone world the page cannot scroll (touch-action: none), so any drag pans – a
         // sloppy diagonal thumb too; in the page layout only a mostly horizontal drag does (the page owns vertical)
-        pointer = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, camX: cam.target, dragging: false, free: getComputedStyle(canvas).touchAction === 'none' };
+        // a finger on a flinging world stops it (and that touch is no tap)
+        const stopped = Math.abs(cam.fling) > 60;
+        cam.fling = 0;
+        cam.target = cam.x;
+        pointer = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, camX: cam.x, dragging: false, moved: stopped, samples: [{ t: e.timeStamp || performance.now(), x: e.clientX }], free: getComputedStyle(canvas).touchAction === 'none' };
       });
       canvas.addEventListener('pointermove', e => {
         if (!pointer || e.pointerId !== pointer.id) return;
@@ -248,18 +339,23 @@
           canvas.setPointerCapture?.(e.pointerId);
         }
         if (pointer.dragging) {
-          cam.vel = (pointer.x - e.clientX) * 0.6;
+          // direct: the world point under the finger stays under the finger
           pointer.x = e.clientX;
+          const now = e.timeStamp || performance.now();
+          pointer.samples.push({ t: now, x: e.clientX });
+          while (pointer.samples.length > 2 && now - pointer.samples[0].t > FLING_WINDOW) pointer.samples.shift();
           cam.target = cam.x = math.clamp(pointer.camX - dx, 0, Math.max(0, worldW - w));
         }
       });
       const end = e => {
         if (!pointer || e.pointerId !== pointer.id) return;
         const wasDrag = pointer.dragging,
-          moved = pointer.moved;
+          moved = pointer.moved,
+          samples = pointer.samples;
         pointer = null;
         if (wasDrag) {
-          cam.target = math.clamp(cam.x + cam.vel * 6, 0, Math.max(0, worldW - w));
+          cam.fling = flingSpeed(samples, e.timeStamp || performance.now());
+          cam.target = cam.x;
           return;
         }
         if (e.type === 'pointercancel' || moved) return;
@@ -271,7 +367,12 @@
     }
     function handleTap(p) {
       mochi.idleTime = 0;
-      const hit = [...hits].reverse().find(r => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1);
+      // P1.2: a worker's body wins over a building or the deposit behind it; Mochi, guardians, carts and capsules win
+      // over a worker
+      const inside = r => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1,
+        top = [...hits].reverse().find(inside),
+        worker = (!top || top.type === 'building' || top.type === 'deposit') && [...workerHits].reverse().find(inside),
+        hit = worker || top;
       if (hit) {
         if (hit.type === 'deposit') actions.mine?.();
         else if (hit.type === 'building') actions.openBuilding?.(hit.key);
@@ -279,8 +380,14 @@
         else if (hit.type === 'mine-entrance') actions.enterMine?.();
         else if (hit.type === 'pips') actions.talk?.('pips');
         else if (hit.type === 'guardian') actions.talk?.(hit.key);
+        else if (hit.type === 'worker') {
+          const again = inspect.id === hit.key && time < inspect.until;
+          Object.assign(inspect, { id: again ? null : hit.key, until: again ? 0 : time + 4, card: hit.card });
+          stats.inspects = (stats.inspects || 0) + 1;
+        }
         else if (hit.type === 'cart') view.auto?.rail ? actions.openBuilding?.('rail') : actions.sendCart?.();
         else if (hit.type === 'sell') actions.sell?.('stall');
+        else if (hit.type === 'decor') actions.openLook?.(hit.key);
         else if (hit.type === 'mochi') {
           mochi.action = 'cheer';
           mochi.actionTime = 1.2;
@@ -289,8 +396,36 @@
       }
       if (p.y > groundY - k * 2) mochi.target = math.clamp(p.x, k, worldW - k);
     }
+    // the camera's speed (px/s, world direction) from the finger's last samples; 0 for a slow or held release
+    function flingSpeed(samples, now) {
+      const recent = samples.filter(p => now - p.t <= FLING_WINDOW * 1.5);
+      if (recent.length < 2) return 0;
+      const a = recent[0],
+        b = recent[recent.length - 1],
+        dt = (b.t - a.t) / 1000;
+      // the finger rested before lifting: no fling
+      if (dt <= 0 || now - b.t > 80) return 0;
+      const v = -(b.x - a.x) / dt;
+      return Math.abs(v) < FLING_MIN ? 0 : math.clamp(v, -FLING_MAX, FLING_MAX);
+    }
     function focusOn(x) {
+      cam.fling = 0;
       cam.target = math.clamp(x - w / 2, 0, Math.max(0, worldW - w));
+    }
+    // Beta 1.8 A3: glide to x only if it is outside the view's central 76 % (repeated taps at a visible station do not
+    // move the camera; a finger on the world wins)
+    function ensureVisible(x) {
+      if (pointer || x === null || x === undefined || Number.isNaN(x)) return;
+      if (x < cam.target + w * 0.12 || x > cam.target + w * 0.88) focusOn(x);
+    }
+    // Beta 1.8: glide to a station (its plot, or a workplace's station) so its work area fills the view
+    function focusStation(key) {
+      // the building itself (its plot); a workplace without a plot of its own: its station
+      const name = KEY_PLOT[key] ?? key,
+        x = hasPlot(name) ? plotX(name) : STATIONS[key] ? stationX(key) : null;
+      if (x === null) return false;
+      focusOn(x);
+      return true;
     }
     function focusMochi() {
       focusOn(mochi.x);
@@ -301,7 +436,7 @@
       const count = view.helperCount || 0;
       while (helpers.length < count) {
         const i = helpers.length;
-        helpers.push({ x: plotX('hut') + (i - 1) * 0.9 * k, dir: 1, look: Kit.WORKERS[i % Kit.WORKERS.length], seed: 30 + i, working: false });
+        helpers.push({ x: plotX('hut') + (i - 1) * 0.9 * k, dir: 1, look: roleLook(Kit.WORKERS[i % Kit.WORKERS.length], 'miner'), seed: 30 + i, working: false });
       }
       helpers.length = count;
       const shipCount = view.buildings[3] > 0 ? Math.min(3, view.freighterCount) : 0;
@@ -330,6 +465,11 @@
           residents.push({ x: plotX(r.plot) + r.offset * k, look: Kit.WORKERS[(i + 3) % Kit.WORKERS.length], seed: 60 + i, chat: 0, facing: i % 2 ? -1 : 1 })
         );
     }
+    // the stretch of ground Mochi (and Void beside Mochi) occupy, with room for one kitten on each side
+    function mochiRoom() {
+      const vx = view?.voidMet ? mochi.x - mochi.facing * 1.05 * k : mochi.x;
+      return [Math.min(mochi.x, vx) - 0.85 * k, Math.max(mochi.x, vx) + 0.85 * k];
+    }
     function update(frame) {
       const dt = frame.dt;
       time = frozenTime !== null ? frozenTime : time + dt;
@@ -339,8 +479,20 @@
       if (!view) return;
       if (view.planetId !== planetId) setPlanet(view.planetId);
       syncEntities();
-      if (!pointer?.dragging) cam.x = math.damp(cam.x, cam.target, 8, dt);
-      cam.x = math.clamp(cam.x, 0, Math.max(0, worldW - w));
+      const maxCam = Math.max(0, worldW - w);
+      if (cam.fling && !pointer?.dragging) {
+        // the fling rolls out; the world's edge stops it
+        cam.x += cam.fling * dt;
+        cam.fling *= Math.exp(-FLING_FRICTION * dt);
+        if (cam.x <= 0 || cam.x >= maxCam || Math.abs(cam.fling) < 25) cam.fling = 0;
+        cam.target = cam.x = math.clamp(cam.x, 0, maxCam);
+      } else if (!pointer?.dragging) cam.x = math.damp(cam.x, cam.target, 8, dt);
+      cam.x = math.clamp(cam.x, 0, maxCam);
+      // remember where the player looks (once the camera rests)
+      if (!pointer && !cam.fling && Math.abs(cam.x - cam.target) < 1 && Math.abs(cam.x - cam.saved) > 2 && sized) {
+        cam.saved = cam.x;
+        camRemember(planetId, (cam.x + w / 2) / Math.max(1e-6, k));
+      }
       // Mochi
       mochi.idleTime += dt;
       mochi.actionTime = Math.max(0, mochi.actionTime - dt);
@@ -356,10 +508,13 @@
       if (mochi.target === null && mochi.actionTime <= 0 && mochi.idleTime > 1.5 && Math.abs(mochi.x - mochiHome()) > 0.6 * k) mochi.target = mochiHome();
       // Helper miners: work at the vein only while mining really runs, otherwise rest at the huts.
       const working = view.auto ? view.auto.mine : view.extraction > 0;
+      // P1: a resting helper makes room for Mochi and Void (never three kittens on one spot at the hut)
+      const occ = mochiRoom();
       helpers.forEach((hp, i) => {
         const loader = i === 1,
-          mineSlot = working && i < MINE_SLOTS.length && (!loader || (view.auto?.rail && view.flow?.moving)),
-          home = mineSlot ? plotX('mine') + mineSlotOf(i).at * k * mineDir() : plotX('hut') + REST_SLOTS[i % REST_SLOTS.length] * k;
+          mineSlot = working && i < MINE_SLOTS.length && (!loader || (view.auto?.rail && view.flow?.moving));
+        let home = mineSlot ? plotX('mine') + mineSlotOf(i).at * k * mineDir() : plotX('hut') + REST_SLOTS[i % REST_SLOTS.length] * k;
+        if (!mineSlot && home > occ[0] && home < occ[1]) home = home - occ[0] < occ[1] - home ? occ[0] - (i % 2) * 0.6 * k : occ[1] + (i % 2) * 0.6 * k;
         if (Math.abs(hp.x - home) > 2) {
           hp.dir = home > hp.x ? 1 : -1;
           hp.x += hp.dir * Math.min(Math.abs(home - hp.x), 1.2 * k * dt);
@@ -424,6 +579,13 @@
         if (Math.abs(sprite.x - target) > 2) sprite.x += Math.sign(target - sprite.x) * Math.min(Math.abs(target - sprite.x), 2 * k * dt);
         else sprite.greet = Math.max(0, sprite.greet - dt);
       });
+      // P1: residents make room — inside the stretch where Mochi (and Void) stand, a resident steps to its nearer edge
+      const room = mochiRoom();
+      residents.forEach(r => {
+        const target = r.x > room[0] && r.x < room[1] ? (r.x - room[0] < room[1] - r.x ? room[0] : room[1]) - r.x : 0;
+        r.dxTarget = target;
+        r.dx = (r.dx || 0) + (target - (r.dx || 0)) * Math.min(1, dt * (reduced ? 20 : 3));
+      });
       // Residents: occasional short chats (two neighbours face each other with a tiny bubble).
       residents.forEach((r, i) => {
         r.chat = Math.max(0, r.chat - dt);
@@ -435,8 +597,10 @@
       flash = Math.max(0, flash - dt);
       saleGlow = Math.max(0, saleGlow - dt);
       // Snow on cold worlds (restrained)
-      if (L.sky.snow && !reduced && quality !== 'low' && Math.random() < dt * 6)
-        particles.spawn({ x: cam.x + Math.random() * w, y: -4, vx: 6, vy: 18 + Math.random() * 10, life: (h / 22) * 1.1, size: 1.4 + Math.random() * 1.4, color: 'rgba(255,255,255,0.85)', kind: 'snow' });
+      // P1.4 Living Worlds: now and then a gust (about 3 s in 14) carries the snow sideways – a little more of it
+      const gust = L.sky.snow && Math.sin(time * 0.45) > 0.82;
+      if (L.sky.snow && !reduced && quality !== 'low' && Math.random() < dt * (gust ? 9 : 6))
+        particles.spawn({ x: cam.x + Math.random() * w - (gust ? w * 0.3 : 0), y: -4, vx: gust ? 46 : 6, vy: 18 + Math.random() * 10, life: (h / 22) * 1.1, size: 1.4 + Math.random() * 1.4, color: 'rgba(255,255,255,0.85)', kind: 'snow' });
       particles.update(dt);
       for (const f of floaters) f.age += dt;
       for (let i = floaters.length - 1; i >= 0; i--) if (floaters[i].age >= floaters[i].life) floaters.splice(i, 1);
@@ -446,10 +610,15 @@
     function addHit(r, type, key) {
       if (r) hits.push({ x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, type, key });
     }
+    // Visual Identity round: every working kitten wears its job (Kit.roleLook: transport, miner, tech)
+    const roleLook = (look, role, extra) => (Kit.roleLook ? Kit.roleLook(look, role, extra) : look);
     function kitten(ctx, look, x, y, size, opts) {
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(size, size);
+      // P1: the rig picks its detail by the drawn size; reduced motion drops the secondary wobble
+      opts.px = size;
+      opts.calm = reduced || zoom === 'overview';
       Kit.drawKitten(ctx, look, opts);
       ctx.restore();
     }
@@ -473,6 +642,96 @@
       ctx.closePath();
       ctx.fill();
     }
+    // P1.2: the far colony on the haze range – outposts every few screens: a dome cluster, a mast, a landing tower;
+    // flat silhouettes in the haze colour with a few warm windows (cached with the range)
+    const farRidgeY = (x, fw) => groundY - 3.1 * k - Math.sin(x * 0.0032 + 5 + planetId.length) * 1.05 * k - Math.sin(x * 0.0032 * 2.7 + (5 + planetId.length) * 2) * 0.37 * k;
+    let farSpotsMemo = { key: '', list: [] };
+    const farSpots = fw => {
+      const key = planetId + ':' + Math.round(fw) + ':' + w;
+      if (farSpotsMemo.key === key) return farSpotsMemo.list;
+      const rnd = math.seeded(math.hash('outposts' + planetId)),
+        out = [];
+      for (let x = (0.3 + rnd()) * w * 0.5; x < fw; x += (0.55 + rnd() * 0.5) * w) out.push({ x, kind: Math.floor(rnd() * 3), s: 0.75 + rnd() * 0.4 });
+      farSpotsMemo = { key, list: out };
+      return out;
+    };
+    function farOutposts(c, fw, theme) {
+      const body = theme.surface[0][1] + 'c8',
+        lit = theme.glow || '#ffe9a8';
+      for (const o of farSpots(fw)) {
+        const s = o.s * k,
+          y = farRidgeY(o.x, fw) + 0.18 * k;
+        c.fillStyle = body;
+        if (o.kind === 0) {
+          // a dome cluster with a connecting tube
+          for (const [dx, r] of [[-0.55, 0.42], [0, 0.6], [0.6, 0.36]]) {
+            c.beginPath();
+            c.ellipse(o.x + dx * s, y, r * s, r * 0.82 * s, 0, Math.PI, 0);
+            c.fill();
+          }
+          c.fillRect(o.x - 0.9 * s, y - 0.12 * s, 1.8 * s, 0.12 * s);
+          for (const dx of [-0.15, 0.12, 0.62]) CA.fillRR(c, o.x + dx * s, y - 0.3 * s, 0.09 * s, 0.07 * s, 0.02 * s, lit);
+        } else if (o.kind === 1) {
+          // a relay mast with a dish
+          c.fillRect(o.x - 0.05 * s, y - 1.7 * s, 0.1 * s, 1.7 * s);
+          c.beginPath();
+          c.moveTo(o.x - 0.35 * s, y);
+          c.lineTo(o.x, y - 1.1 * s);
+          c.lineTo(o.x + 0.35 * s, y);
+          c.closePath();
+          c.fill();
+          c.beginPath();
+          c.ellipse(o.x + 0.18 * s, y - 1.35 * s, 0.26 * s, 0.12 * s, -0.5, 0, TAU);
+          c.fill();
+        } else {
+          // a landing tower with a pad and a hangar
+          c.fillRect(o.x - 0.16 * s, y - 1.35 * s, 0.32 * s, 1.35 * s);
+          c.fillRect(o.x - 0.42 * s, y - 1.5 * s, 0.84 * s, 0.18 * s);
+          c.beginPath();
+          c.ellipse(o.x + 0.95 * s, y, 0.55 * s, 0.38 * s, 0, Math.PI, 0);
+          c.fill();
+          for (let i = 0; i < 3; i++) CA.fillRR(c, o.x - 0.06 * s, y - (1.1 - i * 0.32) * s, 0.12 * s, 0.07 * s, 0.02 * s, lit);
+        }
+      }
+    }
+    // the outposts' beacons blink (live, a few dots): on the mast top, the tower roof
+    function farBeacons(ctx, fw, theme) {
+      const shift = -cam.x * 0.12;
+      for (const [i, o] of farSpots(fw).entries()) {
+        if (o.kind === 0) continue;
+        const x = o.x + shift;
+        if (x < -k || x > w + k) continue;
+        const s = o.s * k,
+          y = farRidgeY(o.x, fw) + 0.18 * k - (o.kind === 1 ? 1.75 : 1.58) * s,
+          on = Math.sin(time * 2.1 + i * 1.7) > 0.35;
+        if (on) CA.glow(ctx, x, y, 0.1 * k, o.kind === 1 ? '#ff8f8f' : theme.glow || '#ffe9a8', 0.9);
+      }
+    }
+    // a shuttle crosses the far sky now and then (one at a time, slow, small; its engine glow and a short trail)
+    function drawFarShuttle(ctx, width, theme) {
+      const period = 17,
+        p = (time % period) / 9;
+      if (p > 1) return;
+      const dir = Math.floor(time / period) % 2 ? -1 : 1,
+        x = dir > 0 ? -k + p * (width + 2 * k) : width + k - p * (width + 2 * k),
+        y = groundY - (4.3 + Math.sin(time * 0.5) * 0.15) * k,
+        s = 0.2 * k;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, Math.min(p, 1 - p) * 6) * 0.85;
+      const trail = ctx.createLinearGradient(x - dir * 2.2 * k, y, x, y);
+      trail.addColorStop(0, 'rgba(255,255,255,0)');
+      trail.addColorStop(1, 'rgba(255,233,168,0.55)');
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = 0.05 * k;
+      ctx.beginPath();
+      ctx.moveTo(x - dir * 2.2 * k, y + 0.04 * k);
+      ctx.lineTo(x - dir * 0.6 * s, y);
+      ctx.stroke();
+      CA.fillRR(ctx, x - s, y - 0.32 * s, 2 * s, 0.64 * s, 0.3 * s, '#e8e4fa');
+      CA.fillRR(ctx, x + dir * 0.25 * s - 0.25 * s, y - 0.22 * s, 0.5 * s, 0.26 * s, 0.1 * s, 'rgba(170,230,255,0.95)');
+      CA.glow(ctx, x - dir * 1.1 * s, y, 0.45 * s, '#ffb35a', 0.9);
+      ctx.restore();
+    }
     function drawBackground(ctx, width, height, theme) {
       const bg = Art.spaceBackground('col-' + planetId, Math.ceil(width) + 60, Math.ceil(height), theme.sky, math.hash('sky' + planetId));
       ctx.drawImage(bg, -(cam.x * 0.05) % 60, 0);
@@ -480,6 +739,32 @@
       if (L.sky.aurora || view.coreHealed) CA.aurora(ctx, width, height, time);
       const [px, py] = L.sky.planet;
       Art.drawPlanet(ctx, planetId, width * px - cam.x * 0.03, height * py, Math.min(width, height) * 0.08, time * 0.003);
+      // Beta 1.9 M1: the tall-phone sky – a far range high above the horizon in the planet's haze, with a few beacon
+      // lights of distant outposts (very slow parallax). Only where the sky is tall (phones held upright); cached.
+      // P1.2: on every screen with sky room above the buildings (wide screens too), and the range carries the colony's
+      // far outposts: domes, masts and a landing tower in the haze, their windows lit – the world goes on behind the
+      // stations instead of ending in an empty sky
+      if (groundY > 4.6 * k) {
+        const fw = worldW * 0.12 + w,
+          farther = cached('farther' + planetId + w + 'x' + h + ':' + k, fw, h, c => {
+            const haze = c.createLinearGradient(0, groundY - 5.5 * k, 0, groundY - 1.4 * k);
+            haze.addColorStop(0, 'rgba(0,0,0,0)');
+            haze.addColorStop(1, theme.atmosphere + '40');
+            c.fillStyle = haze;
+            c.fillRect(0, groundY - 5.5 * k, fw, 4.1 * k);
+            ridge(c, fw, groundY - 3.1 * k, 1.05 * k, 0.0032, 5 + planetId.length, theme.surface[0][1] + '80');
+            ridge(c, fw, groundY - 2.35 * k, 0.6 * k, 0.0051, 9 + planetId.length, theme.surface[1][1] + '88');
+            for (let i = 0; i < 9; i++) {
+              const bx = ((i * 0.37 + 0.11) % 1) * fw,
+                by = groundY - 3.1 * k - Math.sin(bx * 0.0032 + 5 + planetId.length) * 1.05 * k - Math.sin(bx * 0.0032 * 2.7 + (5 + planetId.length) * 2) * 0.37 * k + 0.12 * k;
+              CA.glow(c, bx, by, 0.12 * k, theme.glow, 0.7);
+            }
+            farOutposts(c, fw, theme);
+          });
+        ctx.drawImage(farther, -cam.x * 0.12, 0);
+        if (!reduced) farBeacons(ctx, fw, theme);
+      }
+      if (!reduced && groundY > 4.6 * k) drawFarShuttle(ctx, width, theme);
       // Parallax ridges + distant settlement silhouettes (cached per planet and size)
       const far = cached('far' + planetId + w + 'x' + h, worldW * 0.3 + w, h, c => ridge(c, worldW * 0.3 + w, groundY - 1.6 * k, 0.5 * k, 0.006, 1, theme.surface[1][1] + 'aa'));
       const mid = cached('mid' + planetId + w + 'x' + h, worldW * 0.55 + w, h, c => {
@@ -515,6 +800,29 @@
     function drawFabBench(ctx, x, y, fab) {
       const w = 1.3 * k,
         top = y - 0.62 * k;
+      // Beta 1.9 M1: the Werkstatt – a workshop shed behind the bench (sign, tool wall, lamp while it works); with a
+      // second production line (research Zusatzfließband) a second belt runs along its wall
+      CA.box(ctx, x, y, 1.9 * k, 1.35 * k, 0.3 * k, '#cfc6ee', '#ece6ff', '#b3a9dd');
+      CA.poly(ctx, [[x - 1.12 * k, y - 1.35 * k], [x, y - 1.8 * k], [x + 1.12 * k, y - 1.35 * k]], '#8f86c8');
+      CA.fillRR(ctx, x - 0.62 * k, y - 1.62 * k, 1.24 * k, 0.24 * k, 0.07 * k, 'rgba(29,33,80,0.92)');
+      ctx.fillStyle = '#ffd77a';
+      ctx.font = `900 ${Math.max(7, Math.round(0.16 * k))}px Nunito, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('WERKSTATT', x, y - 1.45 * k);
+      ctx.textAlign = 'left';
+      for (let i = 0; i < 3; i++) CA.line(ctx, x - 0.7 * k + i * 0.22 * k, y - 1.15 * k, x - 0.7 * k + i * 0.22 * k, y - 0.88 * k, 0.04 * k, i === 1 ? '#ffb35a' : '#6f7da8');
+      CA.glow(ctx, x + 0.65 * k, y - 1.12 * k, 0.12 * k, fab.work.length ? '#ffe9a8' : '#5a5f88', 0.9);
+      if ((fab.lines || 1) > 1) {
+        ctx.fillStyle = '#2a2d52';
+        ctx.fillRect(x - 0.85 * k, y - 0.98 * k, 1.7 * k, 0.07 * k);
+        ctx.fillStyle = '#7f86b8';
+        const roll2 = reduced ? 0 : (time * 0.6) % 1;
+        for (let i = 0; i < 8; i++) {
+          ctx.beginPath();
+          ctx.arc(x - 0.8 * k + ((i + roll2) % 8) * 0.2 * k, y - 0.945 * k, 0.022 * k, 0, TAU);
+          ctx.fill();
+        }
+      }
       ctx.fillStyle = 'rgba(30,26,60,0.9)';
       ctx.fillRect(x - w / 2, top, w, 0.12 * k);
       ctx.fillStyle = '#4a4f78';
@@ -684,6 +992,25 @@
       }
     }
     // Beta 1.3 colony look: a lantern chain between the built plots (purely visual, glows softly; static in reduced motion)
+    // P1.5: the planet decoration of this world (meta.decor, one per planet) stands in the front yard of the home, on
+    // the side with more room; it reacts to the world (frozen on an unheated Glacies, blossoms open once freed)
+    const decorStats = { drawn: null };
+    function drawPlanetDecor(ctx) {
+      decorStats.drawn = null;
+      const id = view.cosmeticDecor;
+      if (!id || !CA.decor || !hasPlot('hut')) return;
+      const hx = plotX('hut'),
+        others = Object.keys(L.plots).filter(n => n !== 'hut' && hasPlot(n)).map(plotX),
+        room = side => Math.min(...others.map(px => Math.abs(px - (hx + side * 1.8 * k))), 99 * k),
+        side = hx + 1.8 * k > L.width * k - 1.6 * k ? -1 : hx - 1.8 * k < 1.6 * k ? 1 : room(1) >= room(-1) ? 1 : -1,
+        x = hx + side * 1.8 * k,
+        y = groundAt(x) + 1.15 * k, // in the front yard, in front of the street (below the plaque)
+        r = CA.decor(ctx, id, x, y, k * 0.72, { planet: planetId, time, reduced, warm: view.heated !== false, freed: Boolean(view.liberated) });
+      if (r) {
+        decorStats.drawn = { id, x: Math.round(x / k * 10) / 10, side };
+        addHit(r, 'decor', id);
+      }
+    }
     function drawLanterns(ctx) {
       const xs = ['mine', 'hut', 'depot', 'dock'].filter(hasPlot).map(plotX).sort((a, b) => a - b);
       if (xs.length < 2) return;
@@ -819,7 +1146,9 @@
         return r;
       };
       if (L.cavern) CA.cavern(ctx, plotX(L.cavern.plot), groundAt(plotX(L.cavern.plot)), k, time, L.sky.snow);
-      plot('dock', b[3], 'Frachtdock', CA.dock, { active: auto.dock && flow.selling, queue: v.transportBottleneck });
+      // Beta 1.9 M2: the pad shows the goods the porters brought; the crane swings and crates rise only while the freight
+      // really loads them
+      plot('dock', b[3], 'Frachtdock', CA.dock, { active: v.haul ? Boolean(flow.freighting) : auto.dock && flow.selling, queue: v.transportBottleneck, pad: v.haul && auto.dock ? v.haul.padRatio : undefined, freighting: Boolean(flow.freighting) });
       // Beta 1.7 M5: from Lv 10 the helpers' hut is the mining and logistics HQ (Bergbau-Zentrale)
       plot('hut', b[1], b[1] >= 10 ? 'Bergbau-Zentrale' : 'Helferhütte', CA.hut, { cold: L.sky.snow, warm: v.heated !== false });
       // planet-specific storage/market art (Glacies: Eislager + Frostmarkt; Pyra: Basaltlager + Glutmarkt)
@@ -863,7 +1192,12 @@
           else if (lm.kind === 'pipeBridge') MK.pipeBridge(ctx, lx, lm.to * k, Math.max(ly, groundAt(lm.to * k)), k, tt, producing && Boolean(view.mekhanos?.freed));
         }
       }
-      plot('depot', b[2], ice ? 'Eislager' : volcanic ? 'Basaltlager' : VA ? 'Wurzellager' : 'Lagerhaus', ice ? CA.iceDepot : volcanic ? PA.depot : VA ? VA.depot : CA.depot, { fill: v.storageRatio, active: flow.moving, warm: v.heated !== false, calm });
+      // Beta 1.9 M1: the planet-specific buildings get their tiers as annexes in their world's style (drawn behind them)
+      const annexed = (kind, draw) => (c, x, y, kk, o) => {
+        CA.planetAnnex?.(c, kind, x, y, kk, o.level, planetId, time, Boolean(o.active));
+        return draw(c, x, y, kk, o);
+      };
+      plot('depot', b[2], ice ? 'Eislager' : volcanic ? 'Basaltlager' : VA ? 'Wurzellager' : 'Lagerhaus', ice ? annexed('depot', CA.iceDepot) : volcanic ? annexed('depot', PA.depot) : VA ? annexed('depot', VA.depot) : CA.depot, { fill: v.storageRatio, active: flow.moving, warm: v.heated !== false, calm, skin: v.cosmeticDepot || null, reduced });
       // Beta 1.7 M2: the Packstation beside the depot (on the side with more free ground)
       if ((ind.sorter || 0) > 0 && hasPlot('depot')) {
         const px = packStationX(),
@@ -877,15 +1211,17 @@
         if (host) drawFabBench(ctx, plotX(host) + 2.05 * k, groundAt(plotX(host) + 2.05 * k), view.fab);
       }
       plot('stall', ind.stall, 'Verkaufsstand', (c, x, y, kk, o) => {
+        if (ice || volcanic || VA) CA.planetAnnex?.(c, 'stall', x, y, kk, o.level, planetId, time, Boolean(flow.customers || flow.selling));
         const r = (ice ? CA.iceStall : volcanic ? PA.stall : VA ? VA.stall : CA.stall)(c, x, y, kk, o);
+        // P1.5: a stall look is the roof of every planet's stall (drawn by the stall itself – no pennant line any more)
         if (r && !auto.stall) hits.push({ ...r.counter, type: 'sell', key: 'stall' });
         return r;
-      }, { fill: v.storageRatio, saleGlow });
+      }, { fill: v.haul && auto.stall ? v.haul.shelfRatio : v.storageRatio, saleGlow, skin: v.cosmeticStall || null }); // Beta 1.9: the shelf's real goods
       if (hasPlot('thermal')) plot('thermal', ind.thermal || 0, 'Thermalwerkstatt', CA.thermalWorkshop, { active: flow.thermal, heated: v.heated, fill: v.cellsRatio, locked: !v.thermalUnlocked });
-      if (hasPlot('foundry') && PA) plot('foundry', ind.foundry || 0, 'Glutschmelze', PA.foundry, { active: flow.smelting, fill: v.emberRatio, bars: v.alloyRatio, cooled: v.cooled, calm, overheated: (ind.foundry || 0) >= 10 && !calm });
-      if (hasPlot('sporeGarden') && VA) plot('sporeGarden', ind.sporeGarden || 0, 'Sporengarten', VA.sporeGarden, { active: flow.sporing, fill: v.sporeRatio, welke });
-      if (hasPlot('biolab') && VA) plot('biolab', ind.biolab || 0, 'Biolabor', VA.biolab, { active: flow.brewing, fill: v.sporeRatio, gel: v.gelRatio, welke, capped: welke && (ind.biolab || 0) >= 10, locked: !v.biolabUnlocked });
-      if (hasPlot('workshop') && MK) plot('workshop', ind.workshop || 0, 'Präzisionswerkstatt', MK.workshop, { active: flow.assembling, fill: v.precisionRatio, parts: v.partsRatio });
+      if (hasPlot('foundry') && PA) plot('foundry', ind.foundry || 0, 'Glutschmelze', annexed('foundry', PA.foundry), { active: flow.smelting, fill: v.emberRatio, bars: v.alloyRatio, cooled: v.cooled, calm, overheated: (ind.foundry || 0) >= 10 && !calm });
+      if (hasPlot('sporeGarden') && VA) plot('sporeGarden', ind.sporeGarden || 0, 'Sporengarten', annexed('sporeGarden', VA.sporeGarden), { active: flow.sporing, fill: v.sporeRatio, welke });
+      if (hasPlot('biolab') && VA) plot('biolab', ind.biolab || 0, 'Biolabor', annexed('biolab', VA.biolab), { active: flow.brewing, fill: v.sporeRatio, gel: v.gelRatio, welke, capped: welke && (ind.biolab || 0) >= 10, locked: !v.biolabUnlocked });
+      if (hasPlot('workshop') && MK) plot('workshop', ind.workshop || 0, 'Präzisionswerkstatt', annexed('workshop', MK.workshop), { active: flow.assembling, fill: v.precisionRatio, parts: v.partsRatio });
       // maintenance robots: they roll around while the colony's machines really run
       if (MK) for (const lm of L.landmarks || []) if (lm.kind === 'bot') MK.maintenanceBot(ctx, lm.x * k, groundAt(lm.x * k) + 0.05 * k, k * 0.9, time, Boolean(flow.assembling || flow.moving || flow.selling), lm.x);
       // Beta 1.7 M5: the Sternenharz drill station (Orion): a pumpjack and a resin tank filled to the real level
@@ -902,6 +1238,15 @@
         addHit(hr, 'mine-entrance', 0);
         // Living Worlds 2.0: the headframe names where it leads (the same tower stands on top of the mine view)
         const hx = mx + mineDir() * (L.headframe ?? 1.9) * k;
+        // Beta 1.9: the hand-over at the top in one place – the cabin, the chute to the Halde, the loading cart
+        if (window.MineArt.liftDisplay)
+          window.MineArt.liftDisplay(ctx, hx, groundAt(hx), k * 0.85, window.MineArt.elevatorStage(v.underground.level), time, {
+            lift: v.underground.lift || null,
+            pile: v.pileRatio || 0,
+            cart: v.transit && v.transit.auto ? v.transit.loading : null,
+            chuteDir: -mineDir(),
+            accent: theme.accent
+          });
         CA.plaque(ctx, hx, groundAt(hx) + 0.36 * k, k, 'Förderturm ⇣ Mine', '#8fe3ff');
       }
       const mr = CA.mine(ctx, mx, my, k, { ...common, level: b[0], active: auto.mine && flow.mining, pileRatio: v.pileRatio, pileFull: (v.pileRatio || 0) >= 0.95, rock: L.sky.snow ? '#a7c8e6' : '#8a86c8', flip: mineDir() < 0 });
@@ -937,8 +1282,9 @@
         if (useLine && !(i === 0 && view.trip && !line.auto)) return;
         const cx = math.lerp(x0, x1, c.pos),
           cy = groundAt(cx) - 0.14 * k,
+          seen = seenCarts.push(cx),
           heading = (x1 > x0 ? 1 : -1) * c.dir;
-        CA.vehicle(ctx, cx, cy, k, { level, loaded: c.loaded && c.dir > 0, dir: heading, time, accent: theme.accent });
+        CA.vehicle(ctx, cx, cy, k, { level, loaded: c.loaded && c.dir > 0, dir: heading, time, accent: theme.accent, skin: view.cosmeticVehicle, moving: true, reduced });
         if (i === 0) addHit({ x0: cx - 0.9 * k, y0: cy - 1.1 * k, x1: cx + 0.9 * k, y1: cy + 0.2 * k }, 'cart', 'rail');
       });
       if (useLine) drawCartLine(ctx, theme, line, x0, x1, level);
@@ -946,35 +1292,124 @@
     // Beta 1.7 M3: the carts of the line exactly as the economy moves them – the loading cart at the Halde (its load
     // grows), loaded carts on the way, tipping at the depot or waiting there while it is full, empty ones going back.
     // At the first tier a kitten pushes each wheelbarrow (walks with it, tips it, walks back).
+    const seenCarts = []; // P1: cart positions of this frame (kittens nearby look after them)
+    // Visual Identity round: the cart line drawn calm and glitch-free (the economy's carts are unchanged):
+    // - loaded vehicles run on the front rail, empty ones return on a back rail (behind, a little smaller) — they never
+    //   drive through each other;
+    // - a departing vehicle starts where it loaded (no jump back), the next one rolls in from behind and fades in;
+    // - at the depot an unloaded vehicle turns (a short squash-flip) where it stood; a returning one fades out before the
+    //   Halde instead of vanishing;
+    // - vehicles keep their length apart and stop behind the queue instead of driving into it;
+    // - at most VEHICLES_SHOWN loaded vehicles and one returning one are drawn; the rest is a "+N" pill on the queue
+    //   head (every cart still exists in the economy and in the depot's numbers).
+    const VEHICLES_SHOWN = 2;
+    const drawnVehicles = []; // QA: the cart-line vehicles of the last frame (debug())
+    function vehicleLength(tier) {
+      return (tier >= 4 ? 1.7 : tier === 3 ? 3.2 : 1.6) * k;
+    }
     function drawCartLine(ctx, theme, line, x0, x1, level) {
       const toDepot = x1 > x0 ? 1 : -1,
         barrow = line.tier === 1,
+        len = vehicleLength(line.tier),
+        loadX = x0 + toDepot * 0.4 * k,
+        dumpX = x1 - toDepot * 0.3 * k,
         spot = (x, heading, o) => {
-          const cy = groundAt(x) - 0.14 * k;
-          if (barrow) {
-            // the pusher walks behind the handles (pose: walking, tipping or waiting)
-            const kx = x - heading * 0.95 * k;
-            kitten(ctx, Kit.WORKERS[(o.seed || 0) % Kit.WORKERS.length], kx, groundAt(kx) + 0.04 * k, k * 0.62, { pose: o.pose, t: time, seed: o.seed || 0, facing: heading, walking: o.pose === 'walk' });
+          const back = Boolean(o.back),
+            cy = groundAt(x) - 0.14 * k - (back ? 0.2 * k : 0),
+            sc = back ? 0.8 : 1;
+          ctx.save();
+          if (o.alpha !== undefined && o.alpha < 1) ctx.globalAlpha = Math.max(0, o.alpha);
+          if (sc !== 1 || o.turn !== undefined) {
+            ctx.translate(x, cy);
+            ctx.scale(sc * (o.turn ?? 1), sc);
+            ctx.translate(-x, -cy);
           }
-          CA.vehicle(ctx, x, cy, k, { level, loaded: o.fill > 0, fill: o.fill, tilt: o.tilt || 0, dir: heading, time, accent: theme.accent, barrow });
+          if (barrow && !back) {
+            // the pusher holds the handles (P1: the paws sit on the real grip, the tilt included) — walking, tipping
+            // (a happy finish at the end of the tip) or waiting with the barrow
+            let hx = -0.74 * k,
+              hy = -0.24 * k;
+            if (o.tilt) {
+              const px = hx - 0.35 * k,
+                py = hy + 0.1 * k,
+                cs = Math.cos(-o.tilt),
+                sn = Math.sin(-o.tilt);
+              hx = px * cs - py * sn + 0.35 * k;
+              hy = px * sn + py * cs - 0.1 * k;
+            }
+            const size = k * 0.62,
+              gx = x + heading * hx,
+              kx = gx - heading * 0.3 * size,
+              ky = groundAt(kx) + 0.04 * k;
+            kitten(ctx, roleLook(Kit.WORKERS[(o.seed || 0) % Kit.WORKERS.length], 'transport'), kx, ky, size, { pose: 'push', grip: [0.3, (cy + hy - ky) / size], t: time, seed: o.seed || 0, facing: heading, walking: o.pose === 'walk', mood: o.pose === 'work' && (o.tilt || 0) > 0.45 ? 'happy' : o.pose === 'idle' ? 'tired' : undefined });
+          } else if (barrow) {
+            // an empty barrow on its way back is pushed by a smaller kitten on the back path
+            const kx = x - heading * 0.95 * k;
+            kitten(ctx, roleLook(Kit.WORKERS[(o.seed || 0) % Kit.WORKERS.length], 'transport'), kx, groundAt(kx) - 0.16 * k, k * 0.62, { pose: 'walk', t: time, seed: o.seed || 0, facing: heading, walking: true });
+          }
+          seenCarts.push(x);
+          drawnVehicles.push({ x: Math.round(x), back, len: Math.round(len), alpha: o.alpha ?? 1 });
+          CA.vehicle(ctx, x, cy, k, { level, loaded: o.fill > 0, fill: o.fill, tilt: o.tilt || 0, dir: heading, time, accent: theme.accent, barrow, skin: view.cosmeticVehicle, moving: o.pose === 'walk', reduced });
+          ctx.restore();
           return { x0: x - 0.9 * k, y0: cy - 1.1 * k, x1: x + 0.9 * k, y1: cy + 0.2 * k };
         };
-      let queue = 0;
-      // returning (empty) first, so loaded carts are drawn in front of them
-      line.carts
-        .filter(c => c.phase === 'returning')
-        .forEach(c => spot(math.lerp(x1, x0, c.progress), -toDepot, { fill: 0, pose: 'walk', seed: c.id }));
-      line.carts
-        .filter(c => c.phase !== 'returning')
-        .forEach(c => {
-          if (c.phase === 'moving') spot(math.lerp(x0, x1, c.progress), toDepot, { fill: c.fill, pose: 'walk', seed: c.id });
-          else if (c.phase === 'unloading') spot(x1 - toDepot * 0.3 * k, toDepot, { fill: c.fill * (1 - c.progress), tilt: Math.sin(Math.min(1, c.progress) * Math.PI) * 0.6, pose: 'work', seed: c.id });
-          else spot(x1 - toDepot * (0.3 + 1.6 * queue++) * k, toDepot, { fill: c.fill, pose: 'idle', seed: c.id });
-        });
-      // the loading cart at the Halde: its load grows while the interval runs
+      // returning vehicles first (back rail, behind everything): the nearest one to the Halde is shown
+      const returning = line.carts.filter(c => c.phase === 'returning').sort((a, b) => b.progress - a.progress);
+      const ret = returning[0];
+      if (ret) {
+        const p = ret.progress,
+          turn = p < 0.08 ? Math.max(0.15, Math.abs(1 - (2 * p) / 0.08)) : 1,
+          heading = p < 0.04 ? toDepot : -toDepot;
+        spot(math.lerp(dumpX, loadX, p), heading, { fill: 0, pose: 'walk', seed: ret.id, back: true, turn, alpha: p > 0.88 ? (1 - p) / 0.12 : 1 });
+      }
+      // the loaded ones: unloading first, then waiting in queue order, then moving (most advanced first)
+      const at = line.carts.filter(c => c.phase === 'unloading' || c.phase === 'waiting').sort((a, b) => (a.phase === 'unloading' ? -1 : 0) - (b.phase === 'unloading' ? -1 : 0) || a.id - b.id),
+        moving = line.carts.filter(c => c.phase === 'moving').sort((a, b) => b.progress - a.progress),
+        order = [...at, ...moving];
+      let slot = 0,
+        shownN = 0,
+        hidden = 0,
+        last = null,
+        ahead = null; // x of the vehicle in front (toward the depot)
+      for (const c of order) {
+        let x, o;
+        if (c.phase === 'unloading') {
+          x = dumpX;
+          o = { fill: c.fill * (1 - c.progress), tilt: Math.sin(Math.min(1, c.progress) * Math.PI) * 0.6, pose: 'work', seed: c.id };
+          slot++;
+        } else if (c.phase === 'waiting') {
+          x = dumpX - toDepot * slot++ * (len + 0.2 * k);
+          o = { fill: c.fill, pose: 'idle', seed: c.id };
+        } else {
+          // from the loading spot to its place in the queue
+          const stop = dumpX - toDepot * slot * (len + 0.2 * k);
+          x = math.lerp(loadX, stop, c.progress);
+          o = { fill: c.fill, pose: 'walk', seed: c.id };
+        }
+        // not drawn when the budget is used up, when it would stand inside the vehicle in front (a short track with
+        // long trains) or behind the loading spot — counted in the +N pill instead
+        const tooClose = ahead !== null && (ahead - x) * toDepot < len + 0.2 * k,
+          behindStart = (x - loadX) * toDepot < -0.05 * k;
+        if (shownN >= VEHICLES_SHOWN || tooClose || behindStart) {
+          hidden++;
+          continue;
+        }
+        ahead = x;
+        shownN++;
+        last = { x, r: spot(x, toDepot, o) };
+      }
+      if (last && hidden > 0) CA.crowdBadge?.(ctx, last.x, last.r.y0 - 0.1 * k, k, hidden);
+      // the loading vehicle at the Halde: it waits one length behind the last vehicle that left and fades in while it
+      // rolls up to its spot, then fills up (it never stands inside the one that just departed)
       if (line.auto || line.loading > 0) {
-        const r = spot(x0 + toDepot * 0.4 * k, toDepot, { fill: line.loading, pose: line.loading > 0 && line.auto ? 'carry' : 'idle', seed: 0 });
-        addHit(r, 'cart', 'rail');
+        let x = loadX;
+        if (ahead !== null && (ahead - loadX) * toDepot < len + 0.2 * k) x = ahead - toDepot * (len + 0.2 * k);
+        const behind = (loadX - x) * toDepot,
+          arrive = Math.max(0, 1 - behind / (0.8 * k));
+        if (arrive > 0.05) {
+          const r = spot(x, toDepot, { fill: line.loading, pose: line.loading > 0 && line.auto ? 'carry' : 'idle', seed: 0, alpha: arrive });
+          addHit(r, 'cart', 'rail');
+        }
       }
     }
     function drawShip(ctx, s) {
@@ -1009,6 +1444,45 @@
       ctx.restore();
     }
     // Interplanetary freighters: take off / land at the dock exactly along the saved route timeline.
+    // Beta 1.9 M1: sky traffic – while the Frachtdock really loads freight (view.flow.freighting), small cargo shuttles
+    // lift off from it one after another and climb into the sky, shrinking with distance (uses the tall phones' sky)
+    function drawSkyTraffic(ctx) {
+      if (!view.flow?.freighting || !hasPlot('dock') || reduced) return;
+      const padX = plotX('dock');
+      if (padX < cam.x - 6 * k || padX > cam.x + w + 6 * k) return;
+      const padY = groundAt(padX) - 0.6 * k;
+      for (let i = 0; i < 2; i++) {
+        const p = ((time + i * 3.5) % 7) / 7,
+          y = padY - p * (padY + 0.5 * k),
+          x = padX + Math.sin(p * 2.4 + i) * 1.2 * k + (i ? -1 : 1) * p * 2.5 * k,
+          s = k * (0.42 - 0.3 * p);
+        ctx.globalAlpha = Math.min(1, (1 - p) * 2.2);
+        CA.fillRR(ctx, x - 0.9 * s, y - 0.28 * s, 1.8 * s, 0.56 * s, 0.26 * s, '#e8e4fa');
+        CA.fillRR(ctx, x - 0.2 * s, y - 0.2 * s, 0.4 * s, 0.24 * s, 0.1 * s, 'rgba(170,230,255,0.95)');
+        CA.fillRR(ctx, x - 0.8 * s, y + 0.12 * s, 1.6 * s, 0.14 * s, 0.06 * s, '#ffd77a');
+        CA.glow(ctx, x, y + 0.45 * s, 0.5 * s, '#ffb35a', 0.8);
+        ctx.globalAlpha = 1;
+      }
+    }
+    // Beta 1.9 M7: Glacies transformed by its healed Thermalkern – steaming hot springs between the buildings
+    function drawHotSprings(ctx) {
+      if (planetId !== 'ice' || !view.coreHealed) return;
+      for (const f of [0.18, 0.47, 0.79]) {
+        const x = f * worldW;
+        if (x < cam.x - 2 * k || x > cam.x + w + 2 * k) continue;
+        const y = groundAt(x) + 0.12 * k;
+        ctx.fillStyle = '#7fd8e8';
+        ctx.beginPath();
+        ctx.ellipse(x, y, 0.9 * k, 0.2 * k, 0, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(x - 0.2 * k, y - 0.04 * k, 0.4 * k, 0.07 * k, 0, 0, TAU);
+        ctx.fill();
+        CA.glow(ctx, x, y, 0.9 * k, '#ffb35a', 0.18);
+        if (!reduced) for (let i = 0; i < 3; i++) CA.glow(ctx, x + Math.sin(time + i * 2) * 0.3 * k, y - 0.3 * k - ((time * 0.4 + i / 3) % 1) * 1.2 * k, 0.32 * k, '#ffffff', 0.22);
+      }
+    }
     function drawRouteShips(ctx) {
       const list = view.routeShips || [];
       if (!list.length || !hasPlot('dock')) return;
@@ -1130,19 +1604,280 @@
     }
     const helperImpact = new Map();
     let frozenTime = null; // review tool only (capture-mining-proof): reproducible frames
+    // Beta 1.9 M2/M3: the hand-overs after the depot are real batches (logistics.js, view.haul). Every carrier drawn here
+    // is one run of the economy with its load and phase – nothing walks without goods behind it:
+    // - loading: the next carrier stands at the source while its load grows (operate);
+    // - moving: carries the load to the target (tier 1 by hand above the head, 2 a wheelbarrow, 3 a pulled wagon, 4 a
+    //   hover pallet with an escort; the tier follows the level of the building it serves);
+    // - unloading: sets it down (work; the barrow tips);
+    // - waiting: queues at a full hopper with its load (idle);
+    // - returning: walks back empty.
+    // A leg without goods shows one porter resting at its source (checking the load list now and then).
+    const HAUL_PLOT = { depot: 'depot', refinery: 'refinery', shelf: 'stall', pad: 'dock', hopper: 'refinery' };
+    const HAUL_LANE = { stallRaw: 0, stallBars: 0.07, dockRaw: 0.035, dockBars: 0.1, feed: -0.035, fab: 0.05 };
+    const HAUL_SEED = { stallRaw: 41, stallBars: 67, dockRaw: 29, dockBars: 83, feed: 53, fab: 97 };
+    // planet porters: their own carrier (sled, heat cart, robot cart, woven basket) and their own gear
+    const PORTER_GEAR = { ice: ['acc-mint-scarf'], volcanic: ['acc-explorer-goggles'], machine: ['acc-cute-antenna'], verdant: ['acc-moon-patch'] };
+    const porterLooks = new Map();
+    const porterLook = seed => {
+      const key = planetId + ':' + (seed % Kit.WORKERS.length);
+      if (!porterLooks.has(key)) {
+        const look = Kit.WORKERS[seed % Kit.WORKERS.length];
+        // the transport uniform (vest + cap) plus the world's own gear (scarf, goggles, antenna, patch)
+        porterLooks.set(key, roleLook(look, 'transport', PORTER_GEAR[planetId] && Kit.slotsOf ? Kit.slotsOf(PORTER_GEAR[planetId]) : null));
+      }
+      return porterLooks.get(key);
+    };
+    const HAUL_DUTY = { shelf: 'stall', pad: 'dock', hopper: 'depot' };
+    // where each leg's next carrier loads beside its source (kitten widths along the route), so two legs of one source
+    // do not stand on one spot
+    const HAUL_SLOT = { stallRaw: 0, dockRaw: 0.6, feed: 1.2, stallBars: 0, dockBars: 0.6 };
+    function haulEnds(leg) {
+      const from = HAUL_PLOT[leg.from],
+        to = HAUL_PLOT[leg.to];
+      if (!hasPlot(from) || !hasPlot(to) || from === to) return null;
+      const a = plotX(from),
+        b = plotX(to),
+        dir = Math.sign(b - a) || 1;
+      const x0 = a + dir * 1.9 * k,
+        x1 = b - dir * 1.7 * k;
+      // a hop between neighbours runs on a belt: the load glides, nobody walks back and forth on a tiny stretch
+      return { x0, x1, dir, belt: Math.abs(x1 - x0) < 2.4 * k };
+    }
+    const PORTERS_SHOWN = 1;
+    const CARRY_RANK = { unloading: 0, waiting: 1, moving: 2, returning: 3 };
+    const carryRank = r => CARRY_RANK[r.phase] ?? 4;
+    function haulCarriers() {
+      const hv = view?.haul,
+        out = [];
+      if (!hv) return out;
+      for (const [id, leg] of Object.entries(hv.legs)) {
+        const e = haulEnds(leg);
+        if (!e) continue;
+        e.x0 += e.dir * (HAUL_SLOT[id] || 0) * k; // the whole route starts at the leg's loading spot
+        let queue = 0;
+        // crates start at the Packstation beside the depot (that is where they are packed)
+        const packX = leg.from === 'depot' && (view.industry?.sorter || 0) > 0 && !e.belt ? packStationX() : null;
+        // Visual Identity round: one loaded porter per route is drawn (or one going back when nothing is carried; the one at
+        // the target first, then the most advanced); the other runs stay in the list as hidden and are counted in a
+        // "+N" pill on the leading porter — every drawn porter is still a real run, no run is lost from the picture
+        const ranked = e.belt
+          ? leg.runs.filter(r => r.phase !== 'returning')
+          : leg.runs.slice().sort((a, b) => carryRank(a) - carryRank(b) || (b.progress || 0) - (a.progress || 0));
+        let loadedShown = 0,
+          backShown = 0,
+          lead = null,
+          extra = 0;
+        for (const r of ranked) {
+          if (e.belt && r.phase === 'returning') continue; // a belt has no way back
+          const back = r.phase === 'returning',
+            // a porter going back is only shown while nothing is carried on its route (one kitten per route at a time)
+            hidden = !e.belt && (back ? backShown >= 1 || loadedShown >= 1 : loadedShown >= PORTERS_SHOWN);
+          const c = { leg: id, run: r.id, phase: r.phase, goods: r.goods, tier: leg.tier, units: r.units, fill: r.fill, facing: e.dir, tilt: 0, belt: e.belt },
+            x0 = packX !== null && r.goods === 'packed' ? packX : e.x0;
+          if (r.phase === 'moving') Object.assign(c, { x: x0 + (e.x1 - x0) * r.progress, pose: leg.tier === 1 ? 'carry' : 'walk' });
+          else if (r.phase === 'unloading') Object.assign(c, { x: e.x1, pose: 'work', progress: r.progress, fill: r.fill * (1 - r.progress), tilt: leg.tier === 2 ? Math.sin(Math.min(1, r.progress) * Math.PI) * 0.6 : 0 });
+          else if (r.phase === 'waiting') Object.assign(c, { x: e.x1 - e.dir * (0.95 + 1.05 * queue++) * k, pose: 'idle' });
+          else Object.assign(c, { x: e.x1 + (e.x0 - e.x1) * r.progress, pose: 'walk', fill: 0, facing: -e.dir });
+          if (hidden) {
+            c.hidden = true;
+            if (!back) extra++;
+          } else if (back) backShown++;
+          else {
+            loadedShown++;
+            lead ??= c;
+          }
+          out.push(c);
+        }
+        if (lead && extra) lead.more = extra;
+        if (leg.loading > 1e-9) {
+          const g = leg.loadingGoods;
+          out.push({ leg: id, run: 0, phase: 'loading', goods: g.bars > 0 ? 'bars' : g.packed > g.raw ? 'packed' : 'raw', tier: leg.tier, units: leg.loading, fill: leg.loadingFill, facing: e.dir, tilt: 0, x: e.x0, pose: 'operate', beltOperator: e.belt });
+        }
+      }
+      // Beta 1.9 M3: the Fertigung's batches – a porter carries the raw a batch took from the depot to the bench in the
+      // batch's first seconds and walks back empty (the batch's timing is the economy's own; nothing extra is moved)
+      if (view.fab && hasPlot('depot')) {
+        const ind = view.industry || {},
+          host = ind.refinery && hasPlot('refinery') ? 'refinery' : ind.thermal && hasPlot('thermal') ? 'thermal' : null;
+        if (host) {
+          const a = plotX('depot'),
+            bench = plotX(host) + 2.05 * k,
+            dir = Math.sign(bench - a) || 1,
+            x0 = a + dir * 1.9 * k,
+            x1 = bench - dir * 0.8 * k;
+          for (const wk of view.fab.work || []) {
+            if (!(wk.raw > 0) || Math.abs(x1 - x0) < k) continue;
+            const fetch = Math.max(1, Math.min(0.3 * wk.seconds, Math.abs(x1 - x0) / (1.4 * k))),
+              t = wk.elapsed;
+            if (t < fetch) out.push({ leg: 'fab', run: wk.id, phase: 'moving', goods: 'raw', tier: 1, units: wk.raw, fill: 0.67, facing: dir, tilt: 0, x: x0 + (x1 - x0) * (t / fetch), pose: 'carry' });
+            else if (t < fetch + 0.6) out.push({ leg: 'fab', run: wk.id, phase: 'unloading', goods: 'raw', tier: 1, units: wk.raw, fill: 0.67 * (1 - (t - fetch) / 0.6), facing: dir, tilt: 0, x: x1, pose: 'work' });
+            else if (t < 2 * fetch + 0.6) out.push({ leg: 'fab', run: wk.id, phase: 'returning', goods: 'raw', tier: 1, units: 0, fill: 0, facing: -dir, tilt: 0, x: x1 + (x0 - x1) * ((t - fetch - 0.6) / fetch), pose: 'walk' });
+          }
+        }
+      }
+      // resting porters: one per source building whose legs carry nothing while the receiving station is staffed
+      const busy = new Set(out.map(c => (hv.legs[c.leg] ? HAUL_PLOT[hv.legs[c.leg].from] : 'depot')));
+      for (const [id, leg] of Object.entries(hv.legs)) {
+        const from = HAUL_PLOT[leg.from],
+          e = haulEnds(leg);
+        if (!e || busy.has(from) || !view.auto?.[HAUL_DUTY[leg.to]]) continue;
+        busy.add(from);
+        const glance = Math.sin(time * 0.35 + HAUL_SEED[id]) > 0.7;
+        out.push({ leg: id, run: -1, phase: 'resting', goods: 'raw', tier: leg.tier, units: 0, fill: 0, facing: -e.dir, tilt: 0, x: e.x0 - e.dir * 0.35 * k, pose: glance ? 'check' : 'idle' });
+      }
+      return out;
+    }
+    // P1: where the paws hold a carrier (carrier-local handle ends of colony-art.js haulCarrier, in its units):
+    // [pose, x, y] — barrows are pushed by their handles, sleds and wagons pulled by their bars; robot carts roll alone
+    const HAUL_GRIP = {
+      crystal: { 2: ['push', -0.66, -0.16], 3: ['pull', 0.8, -0.2] },
+      ice: { 2: ['pull', 0.82, -0.2], 3: ['pull', 0.82, -0.2] },
+      volcanic: { 2: ['push', -0.68, -0.16], 3: ['push', -0.42, -0.3] },
+      verdant: { 2: ['push', -0.68, -0.16], 3: ['push', -0.4, -0.3] },
+      machine: {}
+    };
+    function haulGrip(tier, dir, vx, vy, tilt) {
+      const g = (HAUL_GRIP[planetId] || HAUL_GRIP.crystal)[tier];
+      if (!g) return null;
+      const s = k * 0.95;
+      let x = g[1] * s,
+        y = g[2] * s;
+      if (tilt) {
+        // the barrow tips around its wheel (haulCarrier: translate(0.3, −0.1) · rotate(−tilt))
+        const px = x - 0.3 * s,
+          py = y + 0.1 * s,
+          c = Math.cos(-tilt),
+          sn = Math.sin(-tilt);
+        x = px * c - py * sn + 0.3 * s;
+        y = px * sn + py * c - 0.1 * s;
+      }
+      return { pose: g[0], x: vx + dir * x, y: vy + y };
+    }
+    // Market customers: while the shelf really sells (view.flow.customers) 1–3 cats come from the far side, pay at the
+    // counter and leave with a bag. Deterministic in time, no state.
+    function customerSpots() {
+      if (!view?.flow?.customers || !hasPlot('stall')) return [];
+      const sx = plotX('stall'),
+        side = hasPlot('depot') && plotX('depot') > sx ? -1 : 1,
+        n = Math.min(2, view.haul?.legs?.stallRaw?.tier || 1),
+        T = 7,
+        out = [];
+      for (let i = 0; i < n; i++) {
+        const p = (time + (i * T) / n + 0.9) % T,
+          far = sx + side * 3.3 * k,
+          at = sx + side * (0.75 + 0.42 * i) * k;
+        if (p < 2.4) out.push({ i, x: far + (at - far) * (p / 2.4), pose: 'walk', facing: -side, bag: false });
+        else if (p < 3.6) out.push({ i, x: at, pose: 'check', facing: -side, bag: false });
+        else if (p < 3.95) out.push({ i, x: at, pose: 'cheer', facing: -side, bag: true });
+        else if (p < 6.35) out.push({ i, x: at + (far - at) * ((p - 3.95) / 2.4), pose: 'walk', facing: side, bag: true });
+      }
+      return out;
+    }
     // All kittens sorted into two depth lanes (back: resting/residents, front: workers/managers/Mochi).
+    // P1: a kitten standing idle within 2.5 k of a passing cart looks after it (gaze −1..1, the head follows)
+    function cartGaze(x) {
+      let best = null;
+      for (const cx of seenCarts) if (Math.abs(cx - x) < 2.5 * k && (best === null || Math.abs(cx - x) < Math.abs(best - x))) best = cx;
+      return best === null ? 0 : Math.max(-1, Math.min(1, (best - x) / (1.2 * k)));
+    }
+    // P1 QA: what Mochi, Void and Pip wore in the last drawn frame (debug())
+    const drawnWear = {};
     function drawKittens(ctx) {
       const back = [],
-        front = [];
-      residents.forEach(r => back.push({ x: r.x, draw: () => {
-        kitten(ctx, r.look, r.x, groundAt(r.x) - 0.12 * k, k * 0.78, { pose: cheer > 0 ? 'cheer' : view.heated === false ? 'worried' : r.chat > 0 ? 'wave' : 'idle', t: time, seed: r.seed, facing: r.facing });
-        if (r.chat > 1) {
-          const by = groundAt(r.x) - 1.25 * k;
-          CA.fillRR(ctx, r.x - 0.25 * k, by - 0.28 * k, 0.5 * k, 0.3 * k, 0.12 * k, 'rgba(255,255,255,0.9)');
+        front = [],
+        accent = view.theme?.accent || '#c4a3ff';
+      stats.porters = 0;
+      stats.customers = 0;
+      // the belts of short hops (drawn under their loads)
+      if (view.haul)
+        for (const leg of Object.values(view.haul.legs)) {
+          const e = haulEnds(leg);
+          if (!e?.belt || (!leg.runs.length && !(leg.loading > 1e-9))) continue;
+          const y0 = groundAt(e.x0) - 0.42 * k,
+            y1 = groundAt(e.x1) - 0.42 * k;
+          back.push({ x: Math.min(e.x0, e.x1), draw: () => CA.conveyor(ctx, e.x0, y0, e.x1, y1, k * 0.8, true, time, accent) });
+        }
+      for (const c of haulCarriers()) {
+        if (c.hidden || c.x < cam.x - 1.5 * k || c.x > cam.x + w + 1.5 * k) continue;
+        if (c.more) front.push({ x: c.x + 0.001, draw: () => CA.crowdBadge?.(ctx, c.x, groundAt(c.x) - 1.05 * k, k, c.more) });
+        stats.porters++;
+        if (c.belt) {
+          // on the belt: the run's load glides (moving) or sits at the end until it is taken off (unloading, waiting)
+          if (c.fill > 0.02) front.push({ x: c.x, draw: () => CA.haulLoad(ctx, c.x, groundAt(c.x) - 0.52 * k, k * 0.85, c.goods, c.fill, accent) });
+          continue;
+        }
+        const seed = HAUL_SEED[c.leg] + (c.run > 0 ? c.run : 0),
+          look = c.leg === 'fab' ? roleLook(Kit.WORKERS[seed % Kit.WORKERS.length], 'tech') : porterLook(seed),
+          size = k * 0.66,
+          lane = (HAUL_LANE[c.leg] || 0) * k,
+          gy = groundAt(c.x) + 0.06 * k + lane,
+          walking = c.pose === 'walk' || c.pose === 'carry';
+        // P1: the face follows the run — a short tired pause in a queue, a happy finish when a load is set down
+        const mood = c.phase === 'waiting' ? 'tired' : undefined;
+        front.push({ x: c.x, draw: () => {
+          workerHit('porter:' + c.leg + ':' + c.run, c.x, gy - size * 1.15, () => Kit.workerCard?.(look, seed, c.leg === 'fab' ? 'tech' : 'transport'));
+          if (c.tier === 1) {
+            const loaded = c.fill > 0.02;
+            if (c.phase === 'unloading') {
+              // get ready, set the load down in front, a small happy finish (the load shrinks as the economy books it in)
+              kitten(ctx, look, c.x, gy, size, { pose: 'unload', phase: c.progress, t: time, seed, facing: c.facing, tool: 'none' });
+              if (loaded) CA.haulLoad(ctx, c.x + c.facing * size * (0.32 + 0.12 * Math.min(1, (c.progress || 0) * 1.4)), gy - size * (0.36 - 0.14 * Math.min(1, (c.progress || 0) * 1.4)), k * 0.85, c.goods, c.fill, accent);
+              return;
+            }
+            // carried against the chest: the rig draws the load in the kitten's own frame (it bobs with the step), the
+            // paws hold its sides
+            const held = loaded && c.pose === 'carry';
+            kitten(ctx, look, c.x, gy, size, { pose: held ? 'carry' : c.pose === 'carry' ? 'walk' : c.pose, t: time, seed, facing: c.facing, walking, tool: 'none', mood, hold: held ? (hctx, hx, hy) => CA.haulLoad(hctx, hx, hy, (k * 0.72) / size, c.goods, c.fill, accent) : null });
+            if (loaded && !held) CA.haulLoad(ctx, c.x + c.facing * size * 0.42, gy - size * 0.55, k * 0.85, c.goods, c.fill, accent);
+            return;
+          }
+          // tier 2: the kitten pushes the barrow by its handles; tier 3: it pulls the wagon by the drawbar; tier 4: it
+          // walks beside the hover pallet. The paws sit on the real grip (haulGrip) at every frame, the tilt included.
+          const vx = c.tier === 2 ? c.x + c.facing * 0.45 * k : c.tier === 3 ? c.x - c.facing * 0.55 * k : c.x - c.facing * 0.2 * k,
+            vy = groundAt(vx) - 0.1 * k + lane,
+            pose = c.pose === 'carry' ? 'walk' : c.pose;
+          if (c.tier === 4) kitten(ctx, look, c.x + c.facing * 0.35 * k, gy - 0.02 * k, size * 0.95, { pose: pose === 'work' ? 'operate' : pose, t: time, seed, facing: c.facing, walking, tool: 'none', mood });
+          CA.haulCarrier(ctx, vx, vy, k * 0.95, { tier: c.tier, dir: c.facing, goods: c.goods, fill: c.fill, tilt: c.tilt, time, accent, planet: planetId, skin: view.cosmeticVehicle, moving: walking, reduced });
+          if (c.tier === 4) return;
+          const g = haulGrip(c.tier, c.facing, vx, vy, c.tilt);
+          if (!g) return kitten(ctx, look, c.x, gy, size, { pose, t: time, seed, facing: c.facing, walking, tool: 'none', mood });
+          const kx = g.x - c.facing * (g.pose === 'push' ? 0.3 : -0.3) * size,
+            ky = groundAt(kx) + 0.06 * k + lane,
+            moving = c.phase === 'moving' || c.phase === 'returning';
+          kitten(ctx, look, kx, ky, size, { pose: moving || c.phase === 'unloading' ? g.pose : pose, grip: [g.pose === 'push' ? 0.3 : -0.3, (g.y - ky) / size], t: time, seed, facing: c.facing, walking: moving, tool: 'none', mood: c.phase === 'unloading' && (c.progress || 0) > 0.7 ? 'happy' : mood });
+        } });
+      }
+      for (const cu of customerSpots()) {
+        if (cu.x < cam.x - k || cu.x > cam.x + w + k) continue;
+        stats.customers++;
+        const look = Kit.WORKERS[(cu.i * 2 + 3) % Kit.WORKERS.length],
+          size = k * 0.62,
+          gy = groundAt(cu.x) + 0.1 * k;
+        front.push({ x: cu.x, draw: () => {
+          const id = 'customer:' + cu.i;
+          kitten(ctx, look, cu.x, gy, size, { pose: greeting(id) && cu.pose !== 'walk' ? 'wave' : cu.pose, t: time, seed: 90 + cu.i, facing: cu.facing, walking: cu.pose === 'walk', tool: 'none' });
+          workerHit(id, cu.x, gy - size * 1.15, () => Kit.workerCard?.(look, 90 + cu.i, 'trade'));
+          if (!cu.bag) return;
+          const bx = cu.x - cu.facing * 0.2 * k,
+            by = gy - 0.28 * k;
+          CA.fillRR(ctx, bx - 0.12 * k, by - 0.2 * k, 0.24 * k, 0.24 * k, 0.04 * k, '#f0d2a8');
+          CA.crystal(ctx, bx, by - 0.2 * k, 0.16 * k, accent, 0);
+        } });
+      }
+      residents.forEach(r => back.push({ x: r.x + (r.dx || 0), draw: () => {
+        const rx = r.x + (r.dx || 0),
+          moving = Math.abs(r.dxTarget - (r.dx || 0)) > 0.05 * k,
+          pose = cheer > 0 ? 'cheer' : view.heated === false ? 'worried' : r.chat > 0 ? 'wave' : moving ? 'walk' : 'idle',
+          look = pose === 'idle' ? cartGaze(rx) : 0; // a resident looks after a passing cart
+        kitten(ctx, r.look, rx, groundAt(rx) - 0.12 * k, k * 0.78, { pose, walking: moving, t: time, seed: r.seed, facing: moving ? Math.sign(r.dxTarget - (r.dx || 0)) : look ? Math.sign(look) : r.facing, gaze: Math.abs(look) });
+        if (r.chat > 1 && zoom !== 'overview') {
+          const by = groundAt(rx) - 1.25 * k;
+          CA.fillRR(ctx, rx - 0.25 * k, by - 0.28 * k, 0.5 * k, 0.3 * k, 0.12 * k, 'rgba(255,255,255,0.9)');
           ctx.fillStyle = '#ff7aa8';
           ctx.font = `900 ${Math.round(0.22 * k)}px Nunito, sans-serif`;
           ctx.textAlign = 'center';
-          ctx.fillText(r.seed % 2 ? '♥' : '…', r.x, by - 0.06 * k);
+          ctx.fillText(r.seed % 2 ? '♥' : '…', rx, by - 0.06 * k);
           ctx.textAlign = 'left';
         }
       } }));
@@ -1161,7 +1896,19 @@
           }
           helperImpact.set(key, hit);
         }
-        (hp.resting ? back : front).push({ x: hp.x, draw: () => kitten(ctx, hp.look, hp.x, groundAt(hp.x) + (hp.resting ? -0.12 * k : 0.05 * k), k * (hp.resting ? 0.75 : HELPER_SIZE), { pose, t: slot?.pose === 'mine' ? helperTime(hp.seed) : time, seed: hp.seed, facing, tool: i === 1 ? 'crystal' : 'drill' }) });
+        const id = 'helper:' + i,
+          spot = hp.resting && (pose === 'idle' || pose === 'sleep') ? REST_SPOTS[i % REST_SPOTS.length] : null;
+        if (spot) {
+          back.push({ x: hp.x, draw: () => drawRestingHelper(ctx, hp, i, spot, id) });
+          return;
+        }
+        (hp.resting ? back : front).push({ x: hp.x, draw: () => {
+          const gy = groundAt(hp.x) + (hp.resting ? -0.12 * k : 0.05 * k),
+            size = k * (hp.resting ? 0.75 : HELPER_SIZE),
+            hello = greeting(id) && !slot;
+          kitten(ctx, hp.look, hp.x, gy, size, { pose: hello ? 'wave' : pose, t: slot?.pose === 'mine' ? helperTime(hp.seed) : time, seed: hp.seed, facing, tool: i === 1 ? 'crystal' : 'drill' });
+          workerHit(id, hp.x, gy - size * 1.15, () => Kit.workerCard?.(hp.look, hp.seed, hp.resting ? 'rest' : 'miner'));
+        } });
       });
       const duty = view.managers || {},
         flow = view.flow || {};
@@ -1188,20 +1935,29 @@
       });
       if (!duty.dock && view.buildings[3] > 0 && hasPlot('dock')) {
         const px = plotX('dock') + 1.1 * k;
-        front.push({ x: px, draw: () => kitten(ctx, Kit.ROSTER[3], px, groundAt(px) + 0.05 * k, k * 0.85, { pose: view.auto?.dock && view.flow?.selling ? 'wave' : 'idle', t: time, seed: 3 }) });
+        front.push({ x: px, draw: () => kitten(ctx, Kit.dressed ? Kit.dressed(Kit.ROSTER[3], view.pipWear) : Kit.ROSTER[3], px, groundAt(px) + 0.05 * k, k * 0.85, { pose: view.auto?.dock && view.flow?.selling ? 'wave' : 'idle', t: time, seed: 3 }) });
       }
       const mochiPose = mochi.target !== null ? 'walk' : mochi.actionTime > 0 ? mochi.action : cheer > 0 ? 'cheer' : mochi.idleTime > 25 ? 'sleep' : 'idle';
       // Void (Mochi's best friend) keeps a little behind Mochi, curious; tail flicks while waiting
       if (view.voidMet && Kit.VOID) {
-        const vx = mochi.x - mochi.facing * 1.05 * k,
+        // P1: Void takes the free side of Mochi (working helpers and staff keep their spots); no free side → one step
+        // back (behind lane, a little smaller), so three kittens never stack on one point
+        const busyX = [...helpers.filter(hp => !hp.resting).map(hp => hp.x), ...[...staffSprites.values()].map(sp => sp.x)],
+          free = x => busyX.every(bx => Math.abs(bx - x) >= 0.7 * k),
+          side = [mochi.x - mochi.facing * 1.05 * k, mochi.x + mochi.facing * 1.05 * k].find(free),
+          vx = side ?? mochi.x - mochi.facing * 0.8 * k,
+          vBack = side === undefined,
           vPose = mochi.target !== null ? 'walk' : cheer > 0 ? 'cheer' : mochiPose === 'sleep' ? 'sleep' : Math.sin(time * 0.35) > 0.75 ? 'check' : 'idle';
-        front.push({ x: vx - 0.01, draw: () => {
-          kitten(ctx, Kit.VOID, vx, groundAt(vx) + 0.1 * k, k * 0.92, { pose: vPose, t: time, seed: 17, facing: mochi.facing });
+        (vBack ? back : front).push({ x: vx - 0.01, draw: () => {
+          const vLook = Kit.dressed ? Kit.dressed(Kit.VOID, view.voidWear) : Kit.VOID;
+          drawnWear.void = vLook.wear || null;
+          kitten(ctx, vLook, vx, groundAt(vx) + (vBack ? -0.12 : 0.1) * k, k * (vBack ? 0.8 : 0.92), { pose: vPose, t: time, seed: 17, facing: vx < mochi.x ? 1 : -1 });
           hits.push({ x0: vx - 0.45 * k, y0: groundAt(vx) - 1.1 * k, x1: vx + 0.45 * k, y1: groundAt(vx) + 0.1 * k, type: 'guardian', key: 'void' });
         } });
       }
       front.push({ x: mochi.x, draw: () => {
-        const look = Kit.withAccessories(Kit.ROSTER[0], view.mochiAccessories);
+        const look = view.mochiWear && Kit.dressed ? Kit.dressed(Kit.ROSTER[0], view.mochiWear) : Kit.withAccessories(Kit.ROSTER[0], view.mochiAccessories);
+        drawnWear.mochi = look.wear || null;
         // at the rock she faces the flank she strikes (reduced motion: resting on the rock in the contact pose)
         const mochiFacing = mochiPose === 'mine' && mochi.spot ? mochi.spot.facing * mineDir() : mochi.facing;
         kitten(ctx, look, mochi.x, groundAt(mochi.x) + 0.08 * k, k * 1.08, { pose: mochiPose, t: mochiPose === 'mine' ? (reduced ? helperTime(1) : Kit.MINE_CYCLE - mochi.actionTime - 0.237 + 10 * Kit.MINE_CYCLE) : time, seed: 1, facing: mochiFacing, tool: 'drill' });
@@ -1209,31 +1965,388 @@
       } });
       back.sort((a, b) => a.x - b.x).forEach(e => e.draw());
       front.sort((a, b) => a.x - b.x).forEach(e => e.draw());
+      drawNameTag(ctx);
+    }
+    // P1.2: a resting helper's pause at its spot (see REST_SPOTS): the props (crate, toolbox) belong to the spot
+    function drawRestingHelper(ctx, hp, i, spot, id) {
+      const x = hp.x,
+        base = groundAt(x) + spot.dy * k,
+        size = k * (0.72 + (0.2 + spot.dy) * 0.4),
+        hello = greeting(id),
+        facing = spot.face;
+      let y = base,
+        pose = 'idle',
+        opts = {};
+      if (spot.act === 'crate') {
+        CA.fillRR(ctx, x - 0.3 * k, base - 0.3 * k, 0.6 * k, 0.3 * k, 0.04 * k, '#c99a6a');
+        CA.fillRR(ctx, x - 0.3 * k, base - 0.3 * k, 0.6 * k, 0.06 * k, 0.03 * k, '#e2b885');
+        CA.line(ctx, x - 0.22 * k, base - 0.22 * k, x + 0.22 * k, base - 0.06 * k, 0.03 * k, '#9a6e48');
+        y = base - 0.24 * k;
+        pose = 'sit';
+      } else if (spot.act === 'chat') {
+        // two neighbours take turns: the speaker gestures, the listener tilts the head and looks over
+        const turn = Math.sin(time * 0.7 + (spot.face > 0 ? 0 : Math.PI)),
+          talk = turn > 0.2;
+        pose = talk ? 'wave' : 'idle';
+        opts = { gaze: talk ? 0 : 0.6, mood: talk ? 'happy' : 'curious' };
+        if (turn > 0.75 && zoom !== 'overview') {
+          const by = base - size * 1.55;
+          CA.fillRR(ctx, x - 0.22 * k, by - 0.26 * k, 0.44 * k, 0.28 * k, 0.12 * k, 'rgba(255,255,255,0.9)');
+          ctx.fillStyle = '#7f6ad8';
+          ctx.font = '900 ' + Math.round(0.2 * k) + 'px Nunito, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(['…', '♪', '!', '♥'][(i + Math.floor(time / 9)) % 4], x, by - 0.06 * k);
+          ctx.textAlign = 'left';
+        }
+      } else if (spot.act === 'gaze') {
+        pose = 'sit';
+        opts = { who: 'void' };
+      } else if (spot.act === 'tinker') {
+        const bx = x + facing * 0.46 * k;
+        CA.fillRR(ctx, bx - 0.2 * k, base - 0.2 * k, 0.4 * k, 0.2 * k, 0.04 * k, '#e06b5a');
+        CA.fillRR(ctx, bx - 0.08 * k, base - 0.26 * k, 0.16 * k, 0.07 * k, 0.03 * k, '#9a3a3a');
+        pose = 'work';
+        opts = { tool: 'drill' };
+      } else if (spot.act === 'nap') {
+        pose = 'sit';
+        opts = { mood: 'sleepy' };
+        if (!reduced && zoom !== 'overview') {
+          const zt = (time * 0.5 + i * 0.3) % 1;
+          ctx.globalAlpha = Math.sin(zt * Math.PI) * 0.85;
+          ctx.fillStyle = '#e8e4fa';
+          ctx.font = '900 ' + Math.round((0.16 + zt * 0.1) * k) + 'px Nunito, sans-serif';
+          ctx.fillText('z', x + facing * (0.2 + zt * 0.25) * k, base - size * (1.05 + zt * 0.45));
+          ctx.globalAlpha = 1;
+        }
+      }
+      if (hello && pose !== 'sit') pose = 'wave';
+      kitten(ctx, hp.look, x, y, size, { pose, t: time, seed: hp.seed, facing, tool: 'none', ...opts, ...(hello ? { mood: 'happy', gaze: 0 } : null) });
+      workerHit(id, x, y - size * 1.15, () => Kit.workerCard?.(hp.look, hp.seed, 'rest'));
+    }
+    // the name tag over the inspected worker: name, role, style, a little quirk (fades in and out; follows the kitten)
+    function drawNameTag(ctx) {
+      if (!inspect.id) return;
+      if (time >= inspect.until) {
+        inspect.id = null;
+        return;
+      }
+      if (!inspect.seen) return;
+      if (typeof inspect.card === 'function') inspect.card = inspect.card();
+      const c = inspect.card;
+      if (!c) return;
+      const left = inspect.until - time,
+        a = Math.max(0, Math.min(1, (4 - left) * 6, left * 2.5)),
+        fs1 = Math.max(11, Math.round(0.24 * k)),
+        fs2 = Math.max(9, Math.round(0.17 * k)),
+        f1 = '900 ' + fs1 + 'px Nunito, sans-serif',
+        f2 = '800 ' + fs2 + 'px Nunito, sans-serif';
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.font = f1;
+      const l1 = c.name + (c.role ? '  ·  ' + c.role : '');
+      let tw = ctx.measureText(l1).width;
+      ctx.font = f2;
+      const l2 = c.style,
+        l3 = '„' + c.quirk + '“';
+      tw = Math.max(tw, ctx.measureText(l2).width, ctx.measureText(l3).width);
+      const pw = tw + 0.4 * k,
+        ph = fs1 + fs2 * 2 + 0.42 * k,
+        px = math.clamp(inspect.x - pw / 2, cam.x + 6, cam.x + w - pw - 6),
+        py = inspect.y - ph - 0.18 * k - (1 - a) * 6;
+      CA.fillRR(ctx, px, py, pw, ph, 0.16 * k, '#fff6e8');
+      ctx.fillStyle = '#fff6e8';
+      ctx.beginPath();
+      ctx.moveTo(inspect.x - 0.1 * k, py + ph - 1);
+      ctx.lineTo(inspect.x, py + ph + 0.12 * k);
+      ctx.lineTo(inspect.x + 0.1 * k, py + ph - 1);
+      ctx.fill();
+      ctx.textAlign = 'center';
+      const cx = px + pw / 2;
+      ctx.fillStyle = '#2a2448';
+      ctx.font = f1;
+      ctx.fillText(l1, cx, py + 0.12 * k + fs1 * 0.85);
+      ctx.fillStyle = '#7f6ad8';
+      ctx.font = f2;
+      ctx.fillText(l2, cx, py + 0.2 * k + fs1 + fs2 * 0.85);
+      ctx.fillStyle = '#6a6488';
+      ctx.font = 'italic ' + f2.slice(4);
+      ctx.fillText(l3, cx, py + 0.26 * k + fs1 + fs2 * 1.9);
+      ctx.restore();
+    }
+    // P1.2 composition: the foreground ground is a field with depth instead of a pale band – the planet's props (crystal
+    // pines, ice, basalt, blooms, machine parts, lamps) and pebbles spread at about one per 1.7 kitten widths, each
+    // scaled and shifted by its depth (lower = nearer = larger and faster, parallax 0.12 … 0.4), with a soft contact
+    // shadow. Positions are computed once per layout and size; only the props in view are drawn.
+    let fgMemo = { key: '', list: [] };
+    function foregroundProps(height) {
+      const key = planetId + ':' + Math.round(worldW) + ':' + w + ':' + height + ':' + Math.round(groundY);
+      if (fgMemo.key === key) return fgMemo.list;
+      const frnd = math.seeded(math.hash('fg' + planetId)),
+        depth = Math.max(4, height - groundY - 1.0 * k),
+        list = [];
+      for (let x = frnd() * k; x < worldW * 1.4 + w; x += (0.6 + frnd() * 0.7) * k) {
+        const t = frnd(),
+          i = list.length;
+        list.push({ x, y: groundY + 0.95 * k + t * depth, t, s: (0.4 + 0.5 * t) * (0.75 + frnd() * 0.45) * k, prop: i % 3 === 0, i });
+      }
+      list.sort((p, q) => p.y - q.y);
+      fgMemo = { key, list };
+      return list;
     }
     function drawForeground(ctx, height, theme) {
-      ctx.save();
-      ctx.translate(-cam.x * 0.2, 0);
-      const frnd = math.seeded(math.hash('fg' + planetId));
-      for (let i = 0; i < 14; i++) {
-        const x = frnd() * (worldW * 1.2 + w),
-          y = groundY + 1.1 * k + frnd() * Math.max(4, height - groundY - 1.1 * k),
-          sc = (0.4 + frnd() * 0.5) * k;
-        if (i % 3 === 0) {
-          ctx.globalAlpha = 0.75;
-          if (L.decor.kind === 'machine' && window.MekhanosArt) window.MekhanosArt.prop(ctx, x, y, sc, time, i + 40);
-          else if (L.decor.kind === 'verdant' && window.ViridiaArt) window.ViridiaArt.prop(ctx, x, y, sc, time, i + 40, Boolean(view.viridia?.bloom));
-          else CA.prop(ctx, L.decor.kind, x, y, sc, time, i + 40, theme);
+      // drawn inside the world's translation: a prop's own parallax is the extra shift on top of the world's
+      const list = foregroundProps(height),
+        left = cam.x - 2 * k,
+        right = cam.x + w + 2 * k,
+        depth = height - groundY;
+      // two soft dune bands across the foreground (a little darker than the ground, faster than the world)
+      if (depth > 1.6 * k)
+        for (const [f, amp, freq, alpha, par] of [[0.42, 0.22, 0.011, 0.16, 0.15], [0.72, 0.3, 0.007, 0.2, 0.32]]) {
+          const base = groundY + depth * f,
+            off = cam.x * par;
+          ctx.fillStyle = theme.surface[1][1];
+          ctx.globalAlpha = alpha;
+          ctx.beginPath();
+          ctx.moveTo(cam.x - k, height);
+          for (let x = cam.x - k; x <= cam.x + w + k; x += 18) ctx.lineTo(x, base - Math.sin((x + off) * freq + f * 9) * amp * k - Math.sin((x + off) * freq * 2.3) * amp * 0.4 * k);
+          ctx.lineTo(cam.x + w + k, height);
+          ctx.closePath();
+          ctx.fill();
+        }
+      ctx.globalAlpha = 1;
+      for (const p of list) {
+        const x = p.x - cam.x * (0.12 + 0.28 * p.t);
+        if (x < left || x > right) continue;
+        ctx.fillStyle = 'rgba(20,16,60,0.16)';
+        ctx.beginPath();
+        ctx.ellipse(x, p.y + 0.02 * p.s, 0.55 * p.s, 0.12 * p.s, 0, 0, TAU);
+        ctx.fill();
+        if (p.prop) {
+          ctx.globalAlpha = 0.85;
+          if (L.decor.kind === 'machine' && window.MekhanosArt) window.MekhanosArt.prop(ctx, x, p.y, p.s, time, p.i + 40);
+          else if (L.decor.kind === 'verdant' && window.ViridiaArt) window.ViridiaArt.prop(ctx, x, p.y, p.s, time, p.i + 40, Boolean(view.viridia?.bloom));
+          else if (L.decor.kind === 'volcanic' && window.PyraArt) window.PyraArt.prop(ctx, x, p.y, p.s, time, p.i + 40, Boolean(view.pyra?.calm));
+          else CA.prop(ctx, L.decor.kind, x, p.y, p.s, time, p.i + 40, theme);
           ctx.globalAlpha = 1;
         } else {
+          // pebbles: a pair of flat stones with a light top
           ctx.fillStyle = theme.surface[0][1];
-          ctx.globalAlpha = 0.5;
+          ctx.globalAlpha = 0.55;
           ctx.beginPath();
-          ctx.ellipse(x, y, 0.3 * sc, 0.17 * sc, 0, 0, TAU);
+          ctx.ellipse(x, p.y, 0.3 * p.s, 0.15 * p.s, 0, Math.PI, 0);
+          ctx.ellipse(x + 0.34 * p.s, p.y, 0.17 * p.s, 0.1 * p.s, 0, Math.PI, 0);
+          ctx.fill();
+          ctx.globalAlpha = 0.3;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.ellipse(x - 0.05 * p.s, p.y - 0.1 * p.s, 0.14 * p.s, 0.04 * p.s, 0, 0, TAU);
           ctx.fill();
           ctx.globalAlpha = 1;
         }
       }
-      ctx.restore();
+    }
+    // P1.2 composition: the near frame – a few large, dark silhouettes at the bottom edge (rocks with the planet's own
+    // crystals, ice, basalt, leaves or pipes) that pass faster than the world (parallax 1.3) and a soft shade under
+    // them. They give the picture depth and a calm floor for the scene bar; they never reach the kittens' lane (their
+    // height follows the foreground's depth).
+    let nearMemo = { key: '', list: [] };
+    function nearSpots() {
+      const key = planetId + ':' + Math.round(worldW) + ':' + w;
+      if (nearMemo.key === key) return nearMemo.list;
+      const rnd = math.seeded(math.hash('near' + planetId)),
+        list = [];
+      for (let x = rnd() * 3 * k; x < worldW * 1.3 + w; x += (4.2 + rnd() * 3.4) * k) list.push({ x, s: 0.75 + rnd() * 0.5, flip: rnd() > 0.5 ? 1 : -1, v: Math.floor(rnd() * 3) });
+      nearMemo = { key, list };
+      return list;
+    }
+    function drawNearFrame(ctx, width, height, theme) {
+      const depth = height - groundY;
+      if (depth < 0.9 * k) return;
+      const shade = ctx.createLinearGradient(0, groundY + depth * 0.45, 0, height);
+      shade.addColorStop(0, 'rgba(12,10,40,0)');
+      shade.addColorStop(1, 'rgba(12,10,40,0.38)');
+      ctx.fillStyle = shade;
+      ctx.fillRect(0, groundY + depth * 0.45, width, depth * 0.55 + 1);
+      const size = Math.min(1.1 * k, depth * 0.26),
+        dark = theme.surface[0][1],
+        kind = L.decor?.kind;
+      for (const n of nearSpots()) {
+        const x = n.x - cam.x * 1.3;
+        if (x < -2.2 * size || x > width + 2.2 * size) continue;
+        const sz = size * n.s,
+          y = height + 0.08 * sz;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(n.flip, 1);
+        ctx.globalAlpha = 0.92;
+        ctx.fillStyle = dark;
+        if (kind === 'verdant') {
+          // two broad leaves
+          for (const [a, l] of [[-0.5, 1.5], [0.35, 1.2], [-0.05, 1.7]]) {
+            ctx.save();
+            ctx.rotate(a);
+            ctx.beginPath();
+            ctx.ellipse(0, -l * sz * 0.5, 0.28 * sz, l * sz * 0.5, 0, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+          }
+        } else if (kind === 'machine') {
+          // a pipe elbow with a flange and a half-buried cog
+          ctx.fillRect(-1.2 * sz, -0.55 * sz, 1.5 * sz, 0.32 * sz);
+          ctx.fillRect(0.1 * sz, -0.55 * sz, 0.32 * sz, 0.6 * sz);
+          ctx.fillRect(-0.85 * sz, -0.66 * sz, 0.12 * sz, 0.54 * sz);
+          ctx.beginPath();
+          ctx.arc(0.95 * sz, 0, 0.55 * sz, Math.PI, 0);
+          ctx.fill();
+          for (let i = 0; i < 5; i++) {
+            const a = Math.PI + (i + 0.5) * (Math.PI / 5);
+            ctx.fillRect(0.95 * sz + Math.cos(a) * 0.55 * sz - 0.07 * sz, Math.sin(a) * 0.55 * sz - 0.07 * sz, 0.14 * sz, 0.14 * sz);
+          }
+        } else {
+          // a rock with the planet's spikes (crystal, ice) or columns (basalt)
+          ctx.beginPath();
+          ctx.moveTo(-1.3 * sz, 0);
+          ctx.quadraticCurveTo(-1.2 * sz, -0.62 * sz, -0.45 * sz, -0.7 * sz);
+          ctx.quadraticCurveTo(0.2 * sz, -0.95 * sz, 0.7 * sz, -0.55 * sz);
+          ctx.quadraticCurveTo(1.25 * sz, -0.3 * sz, 1.3 * sz, 0);
+          ctx.closePath();
+          ctx.fill();
+          const spike = kind === 'volcanic' ? null : theme.accent;
+          if (spike && n.v !== 2) {
+            for (const [dx, hh, a] of [[-0.35, 1.25, -0.25], [0.05, 1.6, 0.05], [0.4, 1.05, 0.3]]) {
+              ctx.save();
+              ctx.translate(dx * sz, -0.55 * sz);
+              ctx.rotate(a);
+              ctx.beginPath();
+              ctx.moveTo(-0.16 * sz, 0);
+              ctx.lineTo(0, -hh * 0.62 * sz);
+              ctx.lineTo(0.16 * sz, 0);
+              ctx.closePath();
+              ctx.fill();
+              ctx.globalAlpha = 0.28;
+              ctx.fillStyle = spike;
+              ctx.beginPath();
+              ctx.moveTo(-0.02 * sz, -0.05 * sz);
+              ctx.lineTo(0, -hh * 0.55 * sz);
+              ctx.lineTo(0.12 * sz, -0.05 * sz);
+              ctx.closePath();
+              ctx.fill();
+              ctx.globalAlpha = 0.92;
+              ctx.fillStyle = dark;
+              ctx.restore();
+            }
+          } else if (kind === 'volcanic') {
+            // a lava rock: glowing cracks in the dark stone
+            ctx.save();
+            ctx.globalAlpha = 0.85;
+            ctx.strokeStyle = '#ff8a3a';
+            ctx.lineWidth = Math.max(1.5, 0.05 * sz);
+            ctx.beginPath();
+            ctx.moveTo(-0.7 * sz, -0.3 * sz);
+            ctx.lineTo(-0.3 * sz, -0.45 * sz);
+            ctx.lineTo(-0.05 * sz, -0.25 * sz);
+            ctx.moveTo(0.2 * sz, -0.6 * sz);
+            ctx.lineTo(0.45 * sz, -0.35 * sz);
+            ctx.stroke();
+            ctx.restore();
+          }
+          // the rim light along the top (the sky's light)
+          ctx.globalAlpha = 0.22;
+          ctx.strokeStyle = theme.glow || '#ffffff';
+          ctx.lineWidth = Math.max(1, 0.05 * sz);
+          ctx.beginPath();
+          ctx.moveTo(-1.15 * sz, -0.42 * sz);
+          ctx.quadraticCurveTo(-1.0 * sz, -0.66 * sz, -0.45 * sz, -0.7 * sz);
+          ctx.quadraticCurveTo(0.2 * sz, -0.95 * sz, 0.7 * sz, -0.55 * sz);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+    }
+    // P1.4 Living Worlds – Glacies: frost glitter on the snow (a few points that catch the light in turn, anchored to the
+    // world, not the camera) and snow wisps blown along the ground; both stay low and quiet behind the kittens and the
+    // goods. Reduced motion: the glitter stands still, no wisps. Low quality: none.
+    function drawGlacies(ctx, width, height) {
+      if (planetId !== 'ice' || !L.sky.snow || quality === 'low') return;
+      const step = 2.3 * k,
+        first = Math.floor(cam.x / step),
+        last = first + Math.ceil(width / step) + 1;
+      for (let i = first; i <= last; i++) {
+        const x = i * step + ((i * 53.1) % 1) * step * 0.6,
+          tw = reduced ? (i % 4 === 0 ? 0.7 : 0) : Math.max(0, Math.sin(time * 1.3 + i * 2.17) - 0.86) / 0.14;
+        if (tw <= 0) continue;
+        const y = groundAt(x) - 0.06 * k,
+          r = 0.12 * k * tw;
+        CA.glow(ctx, x, y, r * 2.2, '#dff6ff', 0.55 * tw);
+        ctx.fillStyle = 'rgba(255,255,255,' + (0.9 * tw).toFixed(3) + ')';
+        ctx.beginPath();
+        ctx.moveTo(x, y - r * 1.6);
+        ctx.lineTo(x + r * 0.3, y);
+        ctx.lineTo(x, y + r * 1.6);
+        ctx.lineTo(x - r * 0.3, y);
+        ctx.closePath();
+        ctx.moveTo(x - r * 1.6, y);
+        ctx.lineTo(x, y - r * 0.3);
+        ctx.lineTo(x + r * 1.6, y);
+        ctx.lineTo(x, y + r * 0.3);
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (reduced) return;
+      for (let i = 0; i < 3; i++) {
+        const span = width + 6 * k,
+          x = cam.x - 3 * k + ((time * (18 + i * 7) + i * span * 0.37) % span),
+          y = groundAt(x) - (0.12 + i * 0.08) * k,
+          g = ctx.createLinearGradient(x - 1.6 * k, 0, x + 1.6 * k, 0);
+        g.addColorStop(0, 'rgba(255,255,255,0)');
+        g.addColorStop(0.5, 'rgba(255,255,255,0.22)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(x, y, 1.6 * k, 0.09 * k, -0.04, 0, TAU);
+        ctx.fill();
+      }
+    }
+    // P1.4 Living Worlds – Pyra: the lava under the crust breathes (glowing seams on the ground, a slow wave runs through
+    // them) and, rarely, a far volcano throws a little fountain of embers (every ~37 s, 2.5 s). Before the recalibration
+    // red and restless, afterwards a calm gold. Reduced motion: still seams; low quality: no fountain.
+    function drawPyraLava(ctx, width) {
+      if (planetId !== 'volcanic' || !L.sky.embers) return;
+      const calm = Boolean(view.pyra?.calm),
+        step = 2.9 * k,
+        first = Math.floor(cam.x / step),
+        last = first + Math.ceil(width / step) + 1;
+      for (let i = first; i <= last; i++) {
+        const x = i * step + ((i * 71.3) % 1) * step * 0.5,
+          y = groundAt(x) + 0.05 * k,
+          wave = reduced ? 0.5 : 0.5 + 0.5 * Math.sin(x * 0.03 - time * (calm ? 0.9 : 1.8)),
+          len = (0.35 + ((i * 13.7) % 1) * 0.35) * k;
+        ctx.strokeStyle = calm ? 'rgba(255,200,90,' + (0.25 + wave * 0.35).toFixed(3) + ')' : 'rgba(255,110,50,' + (0.35 + wave * 0.5).toFixed(3) + ')';
+        ctx.lineWidth = 0.06 * k;
+        ctx.beginPath();
+        ctx.moveTo(x - len, y);
+        ctx.lineTo(x - len * 0.3, y + 0.04 * k);
+        ctx.lineTo(x + len * 0.2, y - 0.02 * k);
+        ctx.lineTo(x + len, y + 0.03 * k);
+        ctx.stroke();
+        if (wave > 0.8) CA.glow(ctx, x, y, 0.35 * k, calm ? '#ffd25a' : '#ff7a3a', (wave - 0.8) * 1.6);
+      }
+      if (reduced || quality === 'low') return;
+      const cycle = time % 37;
+      if (cycle < 2.5) {
+        // the far fountain: eight embers in an arc above the horizon (slow parallax, behind everything else here)
+        const fx = cam.x + width * 0.22 - (cam.x * 0.03) % (width * 0.4),
+          fy = groundY - 3.6 * k;
+        for (let j = 0; j < 8; j++) {
+          const u = cycle / 2.5,
+            ang = -Math.PI / 2 + (j - 3.5) * 0.16,
+            d = u * 1.6 * k,
+            ex = fx + Math.cos(ang) * d,
+            ey = fy + Math.sin(ang) * d + u * u * 1.4 * k;
+          CA.glow(ctx, ex, ey, 0.09 * k, calm ? '#ffd25a' : '#ff8a3a', 1 - u);
+        }
+      }
     }
     // Pyra atmosphere: before Emberbell's recalibration rising embers and a red heat haze; afterwards calm golden
     // light, a few sparks and Emberbell himself floating by the Glutschmelze (tap: he talks).
@@ -1433,21 +2546,35 @@
     function draw(ctx, width, height) {
       if (!view) return;
       hits.length = 0;
+      workerHits.length = 0;
+      inspect.seen = false;
+      seenCarts.length = 0;
+      drawnVehicles.length = 0;
       const theme = Art.THEMES[planetId] || Art.THEMES.crystal;
       drawBackground(ctx, width, height, theme);
       ctx.save();
       ctx.translate(-Math.round(cam.x), 0);
+      drawSkyTraffic(ctx);
       drawGround(ctx, height, theme);
       drawDistricts(ctx);
       drawDecor(ctx, theme);
+      // P1.2: the foreground field lies in front of the ground but behind everything standing on it (labels, kittens)
+      drawForeground(ctx, height, theme);
+      // P1.4 Living Worlds: ground-level life behind the buildings and the kittens
+      drawGlacies(ctx, width, height);
+      drawPyraLava(ctx, width);
+      drawHotSprings(ctx);
       drawCables(ctx);
       // the cart line runs behind the buildings (plaques and kittens stay readable in front)
+      CA.beginLabels?.({ short: zoom === 'overview' });
       drawTransport(ctx, theme);
       // Living Worlds 2.0: plain building labels only in the central 70 % of the view (warnings always show)
       CA.setLabelGate?.(x => Math.abs(x - (cam.x + w / 2)) <= w * 0.35);
       drawBuildings(ctx, theme);
+      stats.labels = CA.endLabels?.() || [];
       CA.setLabelGate?.(null);
       if (view.cosmeticColony === 'deco-lanterns') drawLanterns(ctx);
+      drawPlanetDecor(ctx);
       ships.forEach(s => drawShip(ctx, s));
       drawRouteShips(ctx);
       drawStory(ctx);
@@ -1473,7 +2600,6 @@
         }
       });
       ctx.globalAlpha = 1;
-      drawForeground(ctx, height, theme);
       ctx.textAlign = 'center';
       for (const f of floaters) {
         const t = f.age / f.life;
@@ -1490,6 +2616,7 @@
       ctx.globalAlpha = 1;
       ctx.textAlign = 'left';
       ctx.restore();
+      drawNearFrame(ctx, width, height, theme);
       if (flash > 0) {
         ctx.fillStyle = `rgba(255,245,255,${flash * 0.6})`;
         ctx.fillRect(0, 0, width, height);
@@ -1563,19 +2690,26 @@
         off.forEach(fn => fn());
       },
       setZoom,
+      focusStation,
       get zoom() {
         return zoom;
       },
       // Test hooks
       tapWorld: handleTap,
       hitAreas: () => hits.map(r => ({ ...r })),
+      // P1.2: the tappable workers (the mini inspector) and who is shown now
+      workerAreas: () => workerHits.map(({ card, ...r }) => r),
+      inspected: () => (inspect.id && time < inspect.until ? { id: inspect.id, card: typeof inspect.card === 'function' ? inspect.card() : inspect.card } : null),
       worldToScreen: x => x - cam.x,
       plotX,
       groundAt,
       get camera() {
-        return { x: cam.x, worldW, viewW: w };
+        return { x: cam.x, worldW, viewW: w, target: cam.target, fling: cam.fling };
       },
-      debug: () => ({ carts: carts.map(c => ({ pos: c.pos, loaded: c.loaded })), staff: [...staffSprites.keys()], particles: particles.active, floaters: floaters.length, helpers: helpers.length, ships: ships.length, mochiX: Math.round(mochi.x), camX: Math.round(cam.x), hits: hits.length, k: Math.round(k), planet: planetId, ...stats })
+      // Beta 1.9 M3: the carriers as drawn (each is one run of the economy) and the market's customers
+      haulCarriers: () => (view ? haulCarriers() : []),
+      customerSpots: () => (view ? customerSpots() : []),
+      debug: () => ({ carts: carts.map(c => ({ pos: c.pos, loaded: c.loaded })), staff: [...staffSprites.keys()], particles: particles.active, floaters: floaters.length, helpers: helpers.length, ships: ships.length, mochiX: Math.round(mochi.x), camX: Math.round(cam.x), hits: hits.length, k: Math.round(k), groundY: Math.round(groundY), stageH: Math.round(h), stageW: Math.round(w), planet: planetId, dressed: { ...drawnWear }, zoom, vehicles: drawnVehicles.slice(), decor: decorStats.drawn, ...stats })
     };
   }
 

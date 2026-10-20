@@ -268,7 +268,9 @@ function normalizeIndustryColony(saved, levels, legacyConversion) {
   const alloc = normalizeAlloc(saved?.alloc);
   // Beta 1.7 M3: the carts on the surface line (transport.js); missing → an empty line
   const transit = typeof normalizeTransit === 'function' ? normalizeTransit(saved?.transit) : null;
-  return { industry, stock, staff, trip, converted, convertedJobs, railSizing, reserve, roots, alloc, transit };
+  // Beta 1.9 M2: the hand-overs after the depot (logistics.js); missing → empty legs, shelf and pad
+  const haul = typeof normalizeHaul === 'function' ? normalizeHaul(saved?.haul) : null;
+  return { industry, stock, staff, trip, converted, convertedJobs, railSizing, reserve, roots, alloc, transit, haul };
 }
 // Beta 1.7 M2: Verteilung of a colony's depot. The player decides whether surplus raw crystals and bars are sold
 // automatically, how much raw stays as a minimum stock, and whether production orders come before the sale. The
@@ -358,6 +360,7 @@ function inventoryRaw(planet) {
     c.stock.bars * BAR_RAW +
     (c.stock.packed || 0) +
     (typeof transitStock === 'function' ? transitStock(planet) : 0) +
+    (typeof haulStock === 'function' ? haulStock(planet) : 0) +
     inWork
   );
 }
@@ -484,9 +487,65 @@ function academyRank(id) {
 function hireCost(workplace, planet = state.activePlanet) {
   return Math.floor(WORKPLACE[workplace].hire * Math.pow(3, planet) * (1 - 0.1 * academyRank('personnel')));
 }
+// P1.4 — the station managers' training (FORTBILDEN): credits per level (× growth per level). The Meisterstufen in
+// STAFF_TRAINING.master also need the station's own building at a milestone level and cost a factor more. A level once
+// trained is never taken away: the table only decides the next training (docs/p1-4-cosmetics-collection/MANAGER_BALANCE.md).
+// The Meisterstufen: a number of completed Lichtzyklen (account progress; training restarts at 1 with every Lichtzyklus,
+// as it always did) and the station's building at a level in this run; each costs a factor more. Chosen from the
+// simulated curves (MANAGER_BALANCE.md, variant cycles6: the first MAX of an active player on day 3, about a quarter of
+// the station managers at MAX on day 4; a casual player stays at the Meisterstufen in the first week).
+let STAFF_TRAINING = {
+  growth: 1.6,
+  master: {
+    7: { cycles: 1, building: 10, factor: 3 },
+    8: { cycles: 2, building: 15, factor: 6 },
+    9: { cycles: 4, building: 20, factor: 12 },
+    10: { cycles: 6, building: 25, factor: 25 }
+  }
+};
+// Meisterbrief (Bestandsschutz): the highest level a station's manager ever reached, per planet (meta.staffMastery,
+// kept through every Lichtzyklus). A level once reached may be trained again in any later run without waiting for the
+// Lichtzyklen again – the station's building level of the run still counts. Saves from before P1.4 record what their
+// managers have reached on the first load.
+function staffMastery(workplace, planet = state.activePlanet) {
+  return Math.max(0, Math.min(STAFF_MAX_LEVEL, Math.floor(Number(state.meta?.staffMastery?.[planet]?.[workplace]) || 0)));
+}
+function staffMasterySync() {
+  if (!state.meta) return;
+  const m = state.meta.staffMastery && typeof state.meta.staffMastery === 'object' && !Array.isArray(state.meta.staffMastery) ? state.meta.staffMastery : (state.meta.staffMastery = {});
+  state.colonies.forEach((colony, planet) => {
+    for (const [wp, level] of Object.entries(colony?.staff || {})) {
+      if (!(level > 1) || !/^[a-z]\w{0,30}$/i.test(wp)) continue;
+      const row = m[planet] && typeof m[planet] === 'object' ? m[planet] : (m[planet] = {});
+      if (level > staffMastery(wp, planet)) row[wp] = Math.min(STAFF_MAX_LEVEL, Math.floor(level));
+    }
+  });
+}
+// the level of the building a workplace runs (the station a manager's training is tied to)
+function workplaceBuildingLevel(id, planet = state.activePlanet) {
+  const c = colonyAt(planet);
+  if (!c) return 0;
+  if (id === 'mine') return c.buildings[0].level;
+  if (id === 'depot') return c.buildings[2].level;
+  if (id === 'dock') return c.buildings[3].level;
+  if (SHAFT_IDS.includes(id)) return c.underground?.shafts?.[id]?.level || 0;
+  if (id === 'elevator') return Math.max(c.underground?.elevator?.speed || 0, c.underground?.elevator?.cap || 0);
+  return c.industry?.[id] || 0;
+}
+// what keeps a hired station manager from the next training: null, or { level, cycles?, building? } – a Meisterstufe
+// needs a number of completed Lichtzyklen (account progress) and the station's own building at a level (this run)
+function staffTrainBlock(workplace, planet = state.activePlanet) {
+  const level = colonyAt(planet)?.staff?.[workplace] || 0,
+    need = STAFF_TRAINING.master[level + 1];
+  if (!(level > 0) || level >= STAFF_MAX_LEVEL || !need) return null;
+  const cycles = need.cycles && (state.galaxiesSold || 0) < need.cycles && staffMastery(workplace, planet) < level + 1 ? need.cycles : 0,
+    building = need.building && workplaceBuildingLevel(workplace, planet) < need.building ? need.building : 0;
+  return cycles || building ? { level: level + 1, ...(cycles ? { cycles } : {}), ...(building ? { building } : {}) } : null;
+}
 function staffUpgradeCost(workplace, planet = state.activePlanet) {
-  const level = colonyAt(planet).staff[workplace];
-  return Math.floor(WORKPLACE[workplace].hire * Math.pow(3, planet) * 2 * Math.pow(1.6, level - 1) * (1 - 0.1 * academyRank('personnel')));
+  const level = colonyAt(planet).staff[workplace],
+    master = STAFF_TRAINING.master[level + 1];
+  return Math.floor(WORKPLACE[workplace].hire * Math.pow(3, planet) * 2 * Math.pow(STAFF_TRAINING.growth, level - 1) * (master?.factor || 1) * (1 - 0.1 * academyRank('personnel')));
 }
 
 // ----- Industry buildings -----
@@ -522,7 +581,7 @@ function glaciesBoost(kind, planet = state.activePlanet) {
 }
 function frostRate() {
   const level = industryLevel('frostDrill') || 0;
-  return level > 0 ? INDUSTRY_BUILDINGS.frostDrill.perLevel * level * buildingMultiplier(level) * workplaceEfficiency('frostDrill') * glaciesBoost('frost') : 0;
+  return level > 0 ? INDUSTRY_BUILDINGS.frostDrill.perLevel * level * buildingMultiplier(level) * workplaceEfficiency('frostDrill') * glaciesBoost('frost') * (typeof coreFrostFactor === 'function' ? coreFrostFactor(state.activePlanet) : 1) : 0;
 }
 function frostCapacity() {
   const level = industryLevel('frostDrill') || 0;
@@ -530,7 +589,7 @@ function frostCapacity() {
 }
 function thermalRate() {
   const level = industryLevel('thermal') || 0;
-  return level > 0 ? INDUSTRY_BUILDINGS.thermal.perLevel * level * buildingMultiplier(level) * workplaceEfficiency('thermal') * glaciesBoost('thermal') : 0;
+  return level > 0 ? INDUSTRY_BUILDINGS.thermal.perLevel * level * buildingMultiplier(level) * workplaceEfficiency('thermal') * glaciesBoost('thermal') * (typeof coreThermalFactor === 'function' ? coreThermalFactor(state.activePlanet) : 1) : 0;
 }
 function cellCapacity() {
   const level = industryLevel('thermal') || 0;
@@ -555,7 +614,7 @@ function dockRate() {
 function refineryRate() {
   const level = industryLevel('refinery');
   return level > 0
-    ? INDUSTRY_BUILDINGS.refinery.perLevel * level * buildingMultiplier(level) * workplaceEfficiency('refinery') * (secondaryActive('waffles') ? 1.1 : 1)
+    ? INDUSTRY_BUILDINGS.refinery.perLevel * level * buildingMultiplier(level) * workplaceEfficiency('refinery') * (secondaryActive('waffles') ? 1.1 : 1) * (typeof techHas === 'function' && techHas('lensArray') ? 1.1 : 1)
     : 0;
 }
 function feedRate() {
@@ -656,8 +715,11 @@ function simulateColonyFlow(stock, r, a, dt) {
   const inflow = extractedGross;
   let moved = a.rail ? Math.min(r.L * dt, pile) : 0;
   let depot = stock.depot + moved;
-  const saleCap = ((a.stall ? r.S1 : 0) + (a.dock ? r.S2 : 0)) * dt; // raw-equivalent units
-  const hopperRoom = Math.max(0, r.hopperCap - stock.hopper) + (a.refinery ? r.P * dt : 0);
+  // Beta 1.9 M2: with the hauls (logistics.js) the sale and the feed are dispatched onto carriers: the caller passes
+  // what the legs can take (saleRoom, feedRoom); the hopper then fills on arrival, not here
+  const legFeed = r.feedRoom !== undefined,
+    saleCap = r.saleRoom !== undefined ? r.saleRoom : ((a.stall ? r.S1 : 0) + (a.dock ? r.S2 : 0)) * dt; // raw-equivalent units
+  const hopperRoom = legFeed ? r.feedRoom : Math.max(0, r.hopperCap - stock.hopper) + (a.refinery ? r.P * dt : 0);
   // Beta 1.7: the hopper feed leaves the production orders' next batch in the depot (they take turns, nobody starves)
   let fed = a.depot && r.refineryOn ? Math.max(0, Math.min(r.F * dt, depot - (r.fabReserve || 0), hopperRoom)) : 0;
   depot -= fed;
@@ -715,7 +777,7 @@ function simulateColonyFlow(stock, r, a, dt) {
     spores -= idle;
     sporesExtracted -= idle;
   }
-  let hopper = stock.hopper + fed;
+  let hopper = stock.hopper + (legFeed ? 0 : fed);
   const barRoom = Math.max(0, r.barCap - stock.bars) + (r.sellBars === false ? 0 : saleCap / BAR_RAW);
   const processed = a.refinery && r.refineryOn ? Math.max(0, Math.min(r.P * dt, hopper, barRoom * BAR_RAW)) : 0;
   hopper -= processed;
@@ -747,7 +809,7 @@ function simulateColonyFlow(stock, r, a, dt) {
   const rawSold = r.sellRaw === false ? 0 : Math.min(Math.max(0, depot - (r.rawReserve || 0)), capacity);
   depot -= rawSold;
   // Overflow is pushed back upstream (never destroyed).
-  if (hopper > r.hopperCap && fed > 0) {
+  if (!legFeed && hopper > r.hopperCap && fed > 0) {
     const back = Math.min(hopper - r.hopperCap, fed);
     hopper -= back;
     fed -= back;
@@ -804,7 +866,9 @@ const deepCarry = {}; // deep-shaft finds per colony and shaft (fractional, not 
 // Beta 1.7: production runs in steps of at most 1 s (the cart line and the Halde buffer are physical time constants);
 // the cap only guards absurd spans (> 30 h, beyond every offline limit).
 const OFFLINE_CHUNK_MAX = 108000;
-const FLOW_SUM = ['resinExtracted', 'packedNow', 'packedSold', 'extracted', 'inflow', 'moved', 'fed', 'processed', 'barsSold', 'rawSold', 'frostExtracted', 'cellsMade', 'alloysMade', 'coolantUsed', 'partsMade', 'sporesExtracted', 'gelMade', 'lifted', 'manual'];
+// Beta 1.9 M2: rawSold/packedSold/barsSold are what customers and the freighter really bought; *Sent is what left the
+// stores for them (onto the carriers), fed what left the depot for the hopper and fedIn what reached it
+const FLOW_SUM = ['resinExtracted', 'packedNow', 'packedSold', 'extracted', 'inflow', 'moved', 'fed', 'fedIn', 'processed', 'barsSold', 'rawSold', 'rawSent', 'packedSent', 'barsSent', 'shelfSold', 'padSold', 'frostExtracted', 'cellsMade', 'alloysMade', 'coolantUsed', 'partsMade', 'sporesExtracted', 'gelMade', 'lifted', 'manual'];
 // One production call for the colony in context. With the underground open the call is cut into chunks (≤ 1 s for
 // ticks, ≤ seconds/4000 offline) that alternate the discrete underground (deepcore.js) and the surface flow, so the
 // pile the elevator unloads into is drained by the rail in between. Construction advances in the same chunks: a
@@ -829,7 +893,9 @@ function runColonyIndustry(seconds, efficiency = 1) {
   let nums = open ? undergroundNumbers(index) : null;
   // Beta 1.7 M3: with a rail manager the line runs as real carts (transport.js); carts already out finish their trip
   const carts = typeof stepSurfaceTransport === 'function',
-    flowAuto = carts ? { ...auto, rail: false } : auto;
+    flowAuto = carts ? { ...auto, rail: false } : auto,
+    hauls = typeof stepHauls === 'function',
+    haulT = hauls ? haulTables(index) : null; // Beta 1.9: walks, intervals and bounds once per call (offline: 43,200 chunks)
   for (let i = 0; i < chunks && seconds > 0; i++) {
     if (open) {
       if (constructionJob(index) && advanceConstruction(h, index)) nums = undergroundNumbers(index);
@@ -853,6 +919,11 @@ function runColonyIndustry(seconds, efficiency = 1) {
       rates.rawReserve = rawSaleFloor(index);
       rates.fabReserve = fabReserveUnits(index);
       rates.barsReserve = colonyAlloc(index).priority !== 'sale' && typeof fabDemand === 'function' ? fabDemand(index, 'bars') : 0;
+    }
+    const rooms = hauls ? haulRooms(index, rates, auto, h, haulT) : null;
+    if (rooms) {
+      rates.saleRoom = rooms.saleRoom;
+      rates.feedRoom = rooms.feedRoom;
     }
     const flow = simulateColonyFlow(
       {
@@ -896,6 +967,21 @@ function runColonyIndustry(seconds, efficiency = 1) {
       state.planetOps.storage[index] -= back;
       total.moved -= back;
     }
+    // Beta 1.9 M2: what the flow took for the sale and the hopper goes onto the carriers; customers, the freighter and
+    // the hopper book it in only when it arrives
+    if (rooms) {
+      haulDispatch(index, flow, rooms.stallShare);
+      flow.rawSent = flow.rawSold;
+      flow.packedSent = flow.packedSold;
+      flow.barsSent = flow.barsSold;
+      const step = stepHauls(index, h, { S1: auto.stall ? rates.S1 : 0, S2: auto.dock ? rates.S2 : 0, hopperLimit: rates.hopperCap + (auto.refinery ? rates.P : 0), tables: haulT });
+      flow.rawSold = step.sold.raw;
+      flow.packedSold = step.sold.packed;
+      flow.barsSold = step.sold.bars;
+      flow.fedIn = step.fedIn;
+      flow.shelfSold = step.shelfSold;
+      flow.padSold = step.padSold;
+    } else flow.fedIn = flow.fed;
     FLOW_SUM.forEach(key => {
       if (key !== 'lifted' && key !== 'manual') total[key] += flow[key] || 0;
     });

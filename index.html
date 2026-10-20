@@ -349,6 +349,8 @@
             <span>WERFT · DEIN KAMPFSCHIFF</span>
             <h2 id="shipName">Horizon Mk.<b id="shipLevel">1</b></h2>
             <p id="shipDescription">Ausgewogenes Schiff für jede Mission.</p>
+            <p class="ship-dna-line" id="shipDnaLine" aria-label="Schiffs-DNA"></p>
+            <button class="ship-studio-entry" data-ship-studio-open aria-label="Schiffs-Studio öffnen: Lack, Signatur, Triebwerk, Mündung, Treffer"><span aria-hidden="true">🎨</span> Schiffs-Studio</button>
           </div>
           <div class="workshop-stage" id="workshopStage"></div>
           <div class="workshop-detail" id="workshopDetail"></div>
@@ -405,6 +407,7 @@
           </div>
           <button id="crewSlotButton">SLOT FREISCHALTEN</button>
         </article>
+        <button class="studio-entry" data-studio-open="mochi"><i aria-hidden="true">🐾</i><span><b>Kätzchen-Studio</b><small>Outfits und Accessoires für Mochi, Void und die Crew</small></span></button>
         <div class="crew-synergy" id="crewSynergy">KEINE CREW-SYNERGIE AKTIV</div>
         <div class="crew-list" id="crewList"></div>
         <div class="section-heading achievement-heading" id="managerOffice">
@@ -540,6 +543,11 @@
       </div>
       <div class="exp-result" id="expResult"></div>
     </section>
+    <div class="cosmetic-reveal hidden" id="cosmeticReveal" role="status" aria-live="polite">
+      <div class="cr-stage" id="cosmeticRevealStage"><span class="rv-orb" aria-hidden="true"></span><canvas class="reveal-card" id="cosmeticRevealArt" width="192" height="112" aria-hidden="true"></canvas></div>
+      <div class="cr-text"><span id="cosmeticRevealKind">NEU</span><b id="cosmeticRevealName"></b><small id="cosmeticRevealWhy"></small></div>
+      <div class="cr-actions"><button id="cosmeticRevealWear">ANLEGEN</button><button class="secondary" id="cosmeticRevealClose" aria-label="Schließen">✕</button></div>
+    </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="modal hidden" id="introModal">
       <div class="modal-box intro-box">
@@ -614,6 +622,70 @@
         <p class="forge-note">Schmiede Looks aus Sternsplittern. Sie ändern nur, wie Schiff, Tikkis Gleiter und Treffer aussehen – nie Schaden, Einkommen oder Beute. Einmal geschmiedet, gehören sie dir für immer.</p>
         <p class="arsenal-balance" id="forgeBalance"></p>
         <div class="forge-panel" id="forgePanel"></div>
+      </div>
+    </div>
+    <div class="modal hidden" id="studioModal" role="dialog" aria-modal="true" aria-labelledby="studioTitle">
+      <div class="modal-box studio-box">
+        <button class="modal-close" data-close-modal="studioModal" aria-label="Schließen">×</button>
+        <span>KÄTZCHEN-STUDIO · NUR OPTIK</span>
+        <h2 id="studioTitle">Kätzchen-Studio</h2>
+        <p class="studio-balance" id="studioBalance"></p>
+        <div class="studio-chars" id="studioChars" role="tablist" aria-label="Kätzchen"></div>
+        <div class="studio-stage">
+          <canvas id="studioCanvas" aria-label="Vorschau des Kätzchens"></canvas>
+          <b class="studio-who" id="studioWho"></b>
+          <b class="studio-tag hidden" id="studioTag">VORSCHAU – noch nicht angelegt</b>
+        </div>
+        <div class="studio-poses" id="studioPoses" aria-label="Pose"></div>
+        <div class="studio-slots" id="studioSlots" role="tablist" aria-label="Slot"></div>
+        <div class="studio-items" id="studioPanel"></div>
+        <p class="studio-note" id="studioNote"></p>
+        <div class="studio-action" id="studioAction"></div>
+        <p class="studio-small">Looks ändern nur das Aussehen – nie Schaden, Credits, Abbau, Beute oder Forschung. Einmal gekauft, kann jedes freigeschaltete Kätzchen das Teil tragen.</p>
+      </div>
+    </div>
+    <div class="modal hidden" id="shipStudioModal" role="dialog" aria-modal="true" aria-labelledby="shipStudioTitle">
+      <div class="modal-box studio-box ship-studio-box">
+        <button class="modal-close" data-close-modal="shipStudioModal" aria-label="Schließen">×</button>
+        <span>SCHIFFS-STUDIO · NUR OPTIK</span>
+        <h2 id="shipStudioTitle">Schiffs-Studio</h2>
+        <p class="studio-balance" id="shipStudioBalance"></p>
+        <div class="studio-chars ship-studio-models" id="shipStudioModels" role="tablist" aria-label="Schiffsmodell"></div>
+        <div class="studio-stage">
+          <canvas id="shipStudioCanvas" aria-label="Vorschau des Schiffs"></canvas>
+          <b class="studio-who" id="shipStudioWho"></b>
+          <b class="studio-tag hidden" id="shipStudioTag">VORSCHAU – noch nicht angelegt</b>
+        </div>
+        <div class="studio-poses" id="shipStudioViews" aria-label="Ansicht"></div>
+        <div class="studio-slots" id="shipStudioSlots" role="tablist" aria-label="Slot"></div>
+        <div class="studio-items" id="shipStudioPanel"></div>
+        <p class="studio-note" id="shipStudioNote"></p>
+        <div class="studio-action" id="shipStudioAction"></div>
+        <p class="studio-small">Looks ändern nur das Aussehen – nie Schaden, Treffer, Ausweichen oder Beute. Rolle, Ausbaustufe und Waffe bleiben immer sichtbar.</p>
+      </div>
+    </div>
+    <div class="modal hidden" id="lookConfirmModal" role="dialog" aria-modal="true" aria-labelledby="lookConfirmTitle">
+      <div class="modal-box look-confirm-box">
+        <button class="modal-close" data-close-modal="lookConfirmModal" aria-label="Schließen">×</button>
+        <span id="lookConfirmKind">LOOK KAUFEN</span>
+        <h2 id="lookConfirmTitle">Look</h2>
+        <canvas id="lookConfirmArt" width="288" height="168" aria-hidden="true"></canvas>
+        <p class="look-confirm-text" id="lookConfirmText"></p>
+        <div class="look-confirm-price" id="lookConfirmPrice"></div>
+        <div class="look-confirm-actions">
+          <button id="lookConfirmYes">BESTÄTIGEN</button>
+          <button class="secondary" data-close-modal="lookConfirmModal">ABBRECHEN</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="collectionModal" role="dialog" aria-modal="true" aria-labelledby="collectionTitle">
+      <div class="modal-box collection-box">
+        <button class="modal-close" data-close-modal="collectionModal" aria-label="Schließen">×</button>
+        <span>SAMMLUNG · NUR OPTIK</span>
+        <h2 id="collectionTitle">Sammelalbum</h2>
+        <div class="collection-profile" id="collectionProfile"></div>
+        <div class="collection-areas" id="collectionAreas" role="group" aria-label="Bereich"></div>
+        <div class="collection-panel" id="collectionPanel"></div>
       </div>
     </div>
     <div class="modal hidden" id="fabModal" role="dialog" aria-modal="true" aria-labelledby="fabTitle">
@@ -805,6 +877,7 @@
     <div class="story-bubble hidden" id="storyBubble" role="dialog" aria-live="polite">
       <div class="story-portrait" id="storyPortrait"></div>
       <div class="story-copy"><b id="storySpeaker">Mochi</b><p id="storyText"></p></div>
+      <button class="story-action hidden" id="storyAction"></button>
       <button id="storyNext" aria-label="Weiter">›</button>
     </div>
     <div class="modal hidden" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
@@ -839,9 +912,11 @@
         <b class="capsule-item" id="capsuleItem"></b>
         <p class="capsule-odds">
           Die Kapsel enthält zufällig eines von 6 Accessoires – jedes mit derselben Chance (1/6 ≈ 16,7 %). Rein optisch,
-          kein Spielvorteil, einmal pro Spielstand, nicht käuflich. Die übrigen Accessoires gibt es später auf transparente Weise.
+          kein Spielvorteil, einmal pro Spielstand, die Kapsel selbst ist nicht käuflich. Alle Accessoires gibt es mit festem
+          Preis im Kätzchen-Studio.
         </p>
         <button id="capsuleEquip">ANLEGEN</button>
+        <button class="secondary" data-studio-open="mochi">IM KÄTZCHEN-STUDIO ANSEHEN</button>
       </div>
     </div>
     <script src="config.js"></script>
@@ -853,6 +928,8 @@
     <script src="engine/core.js"></script>
     <script src="scenes/kittens.js"></script>
     <script src="scenes/art.js"></script>
+    <script src="scenes/dna-visuals.js"></script>
+    <script src="scenes/cosmetic-art.js"></script>
     <script src="scenes/ship-art.js"></script>
     <script src="scenes/planet-layouts.js"></script>
     <script src="scenes/colony-art.js"></script>
@@ -869,6 +946,7 @@
     <script src="industry.js"></script>
     <script src="deepcore.js"></script>
     <script src="transport.js"></script>
+    <script src="logistics.js"></script>
     <script src="freight.js"></script>
     <script src="pyra.js"></script>
     <script src="mekhanos.js"></script>
@@ -914,6 +992,7 @@
     <script src="chest-reveal.js"></script>
     <script src="expedition-ui.js"></script>
     <script src="outer-campaigns-ui.js"></script>
+    <script src="rematch.js"></script>
     <script src="deepcore-ui.js"></script>
     <script src="batch-ui.js"></script>
     <script src="mobile-ux.js"></script>
@@ -921,8 +1000,16 @@
     <script src="menu-ui.js"></script>
     <script src="research-ui.js"></script>
     <script src="artifacts-ui.js"></script>
+    <script src="wardrobe.js"></script>
+    <script src="ship-studio.js"></script>
+    <script src="collection.js"></script>
     <script src="onboarding.js"></script>
+    <script src="ftue.js"></script>
     <script src="views-ux.js"></script>
+    <script src="gear-loop.js"></script>
+    <script src="combat-control.js"></script>
+    <script src="combat-tutorial.js"></script>
+    <script src="lore.js"></script>
     <script src="platform.js"></script>
     <script src="frame-pacing.js"></script>
     <script src="scenes/boot.js"></script>

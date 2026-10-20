@@ -163,16 +163,63 @@
     const id = Object.keys(MATERIALS).find(key => T[key] && T[key] === theme);
     return MATERIALS[id] || MATERIALS.crystal;
   }
+  // P1 readability: plaques of one frame never overlap. A plaque that would cover an earlier one moves one row down
+  // (twice at most) and is skipped after that — its building still names itself on tap (the sheet). In the overview
+  // the level is left out (short names; the level stays in the sheet and in the detail view).
+  let labelRects = null,
+    labelShort = false;
+  function beginLabels(opts = {}) {
+    labelRects = [];
+    labelShort = Boolean(opts.short);
+  }
+  function endLabels() {
+    const placed = labelRects;
+    labelRects = null;
+    return placed;
+  }
   function plaque(ctx, x, y, k, text, color = C.warm) {
     if (labelGate && text !== String(text).toUpperCase() && !labelGate(x, text)) return;
+    if (labelShort) text = String(text).replace(/ Lv \d+$/, '');
     ctx.font = `900 ${Math.max(9, Math.round(0.24 * k))}px Nunito, sans-serif`;
     const w = ctx.measureText(text).width + 0.36 * k,
       h = 0.4 * k;
+    if (labelRects) {
+      const gap = 0.06 * k;
+      for (let tries = 0; ; tries++) {
+        const hit = labelRects.find(r => x - w / 2 < r.x1 + gap && x + w / 2 > r.x0 - gap && y < r.y1 + gap && y + h > r.y0 - gap);
+        if (!hit) break;
+        if (tries >= 2) return;
+        y = hit.y1 + gap;
+      }
+      labelRects.push({ x0: x - w / 2, y0: y, x1: x + w / 2, y1: y + h, text });
+    }
     fillRR(ctx, x - w / 2, y, w, h, h / 2, 'rgba(29,33,80,0.88)');
     ctx.fillStyle = color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, x, y + h / 2 + 0.5);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+  // Visual Identity round: the hidden part of a crowd as one small pill ("+3 🐾") above the leading kitten or vehicle —
+  // the information stays, the picture stays calm
+  function crowdBadge(ctx, x, y, k, n) {
+    if (!(n > 0)) return;
+    const text = '+' + n;
+    ctx.font = `900 ${Math.max(9, Math.round(0.2 * k))}px Nunito, sans-serif`;
+    const w = ctx.measureText(text).width + 0.42 * k,
+      h = 0.3 * k;
+    fillRR(ctx, x - w / 2, y - h, w, h, h / 2, 'rgba(29,33,80,0.9)');
+    ctx.fillStyle = '#ffd77a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x - 0.08 * k, y - h / 2 + 0.5);
+    ctx.fillStyle = '#ff9ecb';
+    for (const [dx, dy, r] of [[0.13, -0.05, 0.03], [0.17, -0.11, 0.022], [0.09, -0.11, 0.022]]) {
+      ctx.beginPath();
+      ctx.arc(x + w / 2 - 0.22 * k + dx * k, y - h / 2 + dy * k + 0.05 * k, r * k, 0, TAU);
+      ctx.fill();
+    }
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
   }
@@ -345,6 +392,12 @@
       conveyor(ctx, x + 0.8 * k, y - 0.6 * k, x + 2.4 * k, y - 1.2 * k, k, working, t, accent);
       floodlight(ctx, mx - 2.2 * k, y - 3 * k, k, t, 0.35);
     }
+    // Beta 1.9 M1: Lv 100 – a giant crystal spire grown out of the vein, glowing while it is mined
+    if (level >= 100) {
+      crystal(ctx, x - 0.2 * k, y - 0.4 * k, 1.15 * k, accent, -0.12);
+      crystal(ctx, x + 0.45 * k, y - 0.3 * k, 0.7 * k, o.theme.particle || '#fff', 0.2);
+      glow(ctx, x - 0.2 * k, y - 1.2 * k, 0.9 * k, accent, working ? 0.45 + Math.sin(t * 3) * 0.12 : 0.2);
+    }
     // material pile (real stock waiting for transport), red pulse when the pile is full
     const px = x + 2.65 * k,
       heap = Math.round(Math.max(0, Math.min(1, o.pileRatio || 0)) * 10);
@@ -464,6 +517,10 @@
   // Vehicle by rail level: hand cart (1) → big cart (5) → rover (10) → cargo train (25) → maglev pods (50).
   function vehicle(ctx, x, y, k, o) {
     const { level, loaded, dir, time: t, accent } = o;
+    // P1.5: a vehicle look paints body, rim and cab (o.skin = the equipped look); the ornament reads the real state
+    const sk = vehicleSkin(o.skin),
+      paint = (def, part = 'body') => (sk ? sk[part] : def),
+      orn = (x0, y0, w, h) => vehicleOrnament(ctx, sk, x0, y0, w, h, k, t, { loaded: o.fill === undefined ? loaded : o.fill > 0.02, moving: o.moving !== false, reduced: o.reduced });
     ctx.save();
     ctx.translate(x, y);
     if (dir < 0) ctx.scale(-1, 1);
@@ -491,22 +548,25 @@
     if (level < 5 && o.barrow) {
       // a kitten's wheelbarrow: one wheel in front, two handles behind (the kitten is drawn by the scene)
       if (loaded) load(2);
-      poly(ctx, [[-0.42 * k, -0.48 * k], [0.4 * k, -0.48 * k], [0.28 * k, -0.14 * k], [-0.3 * k, -0.14 * k]], C.wood);
-      line(ctx, -0.42 * k, -0.48 * k, 0.4 * k, -0.48 * k, 0.05 * k, C.woodDark);
-      line(ctx, -0.3 * k, -0.2 * k, -0.72 * k, -0.42 * k, 0.05 * k, C.woodDark);
+      poly(ctx, [[-0.42 * k, -0.48 * k], [0.4 * k, -0.48 * k], [0.28 * k, -0.14 * k], [-0.3 * k, -0.14 * k]], paint(C.wood));
+      orn(-0.3 * k, -0.46 * k, 0.6 * k, 0.3 * k);
+      line(ctx, -0.42 * k, -0.48 * k, 0.4 * k, -0.48 * k, 0.05 * k, paint(C.woodDark, 'dark'));
+      line(ctx, -0.3 * k, -0.2 * k, -0.74 * k, -0.24 * k, 0.05 * k, C.woodDark); // handles at paw height (P1)
       line(ctx, -0.12 * k, -0.14 * k, -0.2 * k, 0, 0.05 * k, C.woodDark);
       wheels([0.3], 0.13);
     } else if (level < 10) {
       const big = level >= 5 ? 1.2 : 1;
       if (loaded) load(level >= 5 ? 3 : 2);
-      poly(ctx, [[-0.45 * big * k, -0.5 * k], [0.45 * big * k, -0.5 * k], [0.36 * big * k, -0.1 * k], [-0.36 * big * k, -0.1 * k]], level >= 5 ? '#9aa6c8' : C.wood);
-      line(ctx, -0.45 * big * k, -0.5 * k, 0.45 * big * k, -0.5 * k, 0.05 * k, level >= 5 ? C.metalDark : C.woodDark);
+      poly(ctx, [[-0.45 * big * k, -0.5 * k], [0.45 * big * k, -0.5 * k], [0.36 * big * k, -0.1 * k], [-0.36 * big * k, -0.1 * k]], paint(level >= 5 ? '#9aa6c8' : C.wood));
+      orn(-0.36 * big * k, -0.48 * k, 0.72 * big * k, 0.36 * k);
+      line(ctx, -0.45 * big * k, -0.5 * k, 0.45 * big * k, -0.5 * k, 0.05 * k, paint(level >= 5 ? C.metalDark : C.woodDark, 'dark'));
       wheels([-0.24 * big, 0.24 * big], 0.11);
     } else if (level < 25) {
       // powered rover with cab, antenna and headlight
       if (loaded) load(3);
-      fillRR(ctx, -0.6 * k, -0.52 * k, 0.95 * k, 0.42 * k, 0.1 * k, '#ff9e5a');
-      fillRR(ctx, 0.3 * k, -0.78 * k, 0.42 * k, 0.68 * k, 0.12 * k, '#ffb35a');
+      fillRR(ctx, -0.6 * k, -0.52 * k, 0.95 * k, 0.42 * k, 0.1 * k, paint('#ff9e5a'));
+      orn(-0.6 * k, -0.52 * k, 0.9 * k, 0.42 * k);
+      fillRR(ctx, 0.3 * k, -0.78 * k, 0.42 * k, 0.68 * k, 0.12 * k, paint('#ffb35a', 'cab'));
       fillRR(ctx, 0.4 * k, -0.7 * k, 0.24 * k, 0.24 * k, 0.06 * k, 'rgba(170,230,255,0.95)');
       line(ctx, 0.36 * k, -0.78 * k, 0.3 * k, -1.02 * k, 0.03 * k, C.white);
       glow(ctx, 0.3 * k, -1.04 * k, 0.07 * k, Math.sin(t * 6) > 0 ? C.mint : C.warm, 1);
@@ -518,13 +578,15 @@
         ctx.save();
         ctx.translate(-(1 + wgn) * 0.95 * k, 0);
         if (loaded) load(3);
-        fillRR(ctx, -0.42 * k, -0.48 * k, 0.84 * k, 0.38 * k, 0.08 * k, wgn ? '#c4b3ff' : '#8fe3ff');
+        fillRR(ctx, -0.42 * k, -0.48 * k, 0.84 * k, 0.38 * k, 0.08 * k, sk ? (wgn ? sk.cab : sk.body) : wgn ? '#c4b3ff' : '#8fe3ff');
+        orn(-0.42 * k, -0.48 * k, 0.84 * k, 0.38 * k);
         line(ctx, 0.42 * k, -0.22 * k, 0.55 * k, -0.22 * k, 0.05 * k, C.ink);
         wheels([-0.24, 0.24], 0.11);
         ctx.restore();
       }
-      fillRR(ctx, -0.48 * k, -0.58 * k, 1.05 * k, 0.48 * k, 0.12 * k, '#ff9e5a');
-      fillRR(ctx, 0.12 * k, -0.86 * k, 0.45 * k, 0.4 * k, 0.1 * k, '#ffb35a');
+      fillRR(ctx, -0.48 * k, -0.58 * k, 1.05 * k, 0.48 * k, 0.12 * k, paint('#ff9e5a'));
+      orn(-0.48 * k, -0.58 * k, 0.6 * k, 0.48 * k);
+      fillRR(ctx, 0.12 * k, -0.86 * k, 0.45 * k, 0.4 * k, 0.1 * k, paint('#ffb35a', 'cab'));
       fillRR(ctx, 0.22 * k, -0.8 * k, 0.26 * k, 0.22 * k, 0.06 * k, 'rgba(170,230,255,0.95)');
       glow(ctx, 0.6 * k, -0.32 * k, 0.2 * k, '#fff6d0', 0.8);
       wheels([-0.3, 0.05, 0.4], 0.13);
@@ -533,8 +595,9 @@
       const hover = Math.sin(t * 3) * 0.04 * k;
       ctx.translate(0, hover - 0.12 * k);
       if (loaded) load(3);
-      fillRR(ctx, -0.75 * k, -0.6 * k, 1.5 * k, 0.5 * k, 0.25 * k, '#e8e4fa');
-      fillRR(ctx, -0.75 * k, -0.24 * k, 1.5 * k, 0.12 * k, 0.06 * k, accent);
+      fillRR(ctx, -0.75 * k, -0.6 * k, 1.5 * k, 0.5 * k, 0.25 * k, paint('#e8e4fa'));
+      fillRR(ctx, -0.75 * k, -0.24 * k, 1.5 * k, 0.12 * k, 0.06 * k, paint(accent, 'trim'));
+      orn(-0.55 * k, -0.6 * k, 0.8 * k, 0.36 * k);
       fillRR(ctx, 0.25 * k, -0.52 * k, 0.4 * k, 0.24 * k, 0.1 * k, 'rgba(170,230,255,0.95)');
       glow(ctx, 0, 0, 0.7 * k, C.mint, 0.35);
     }
@@ -574,8 +637,35 @@
       poly(ctx, [[x + 1.65 * k, y], [x + 1.95 * k, y - 0.7 * k], [x + 2.25 * k, y]], '#7f6ad8');
       fillRR(ctx, x + 1.6 * k, y - 0.82 * k, 0.75 * k, 0.12 * k, 0.05 * k, '#c4b3ff');
     }
+    // Beta 1.9 M1: Lv 25 – a real Bohrturm: a lattice derrick over the bore with its crown block; Lv 50 – the derrick
+    // glows while it pumps and a second tank stands beside the first; Lv 100 – a cracking column with resin lights
+    if (level >= 25) {
+      const dx = x - 0.35 * k,
+        top = y - 2.6 * k;
+      line(ctx, dx - 0.45 * k, y, dx - 0.1 * k, top, 0.06 * k, '#7f6ad8');
+      line(ctx, dx + 0.45 * k, y, dx + 0.1 * k, top, 0.06 * k, '#7f6ad8');
+      for (let yy = y - 0.45 * k; yy > top + 0.2 * k; yy -= 0.45 * k) {
+        const f = (y - yy) / (y - top),
+          half = 0.45 * k - 0.35 * k * f;
+        line(ctx, dx - half, yy, dx + half, yy - 0.45 * k, 0.03 * k, '#9f8bf0');
+        line(ctx, dx - half, yy, dx + half, yy, 0.035 * k, '#7f6ad8');
+      }
+      fillRR(ctx, dx - 0.2 * k, top - 0.14 * k, 0.4 * k, 0.16 * k, 0.05 * k, '#c4b3ff');
+      if (level >= 50) glow(ctx, dx, top - 0.06 * k, 0.4 * k, '#ff9ecb', o.active ? 0.75 : 0.3);
+    }
+    if (level >= 50) {
+      const t2 = tx + tw + 0.12 * k,
+        th2 = th * 0.8;
+      fillRR(ctx, t2, y - th2, tw * 0.7, th2, 0.2 * k, 'rgba(232,228,250,0.35)');
+      if (fill > 0) fillRR(ctx, t2 + 0.05 * k, y - 0.05 * k - (th2 - 0.1 * k) * fill, tw * 0.7 - 0.1 * k, (th2 - 0.1 * k) * fill, 0.15 * k, '#ff8fc6');
+    }
+    if (level >= 100) {
+      const cx = x + 2.0 * k;
+      fillRR(ctx, cx - 0.22 * k, y - 2.3 * k, 0.44 * k, 2.3 * k, 0.16 * k, '#e8e4fa');
+      for (let i = 0; i < 4; i++) glow(ctx, cx, y - 0.45 * k - i * 0.5 * k, 0.1 * k, '#ff9ecb', o.active ? 0.6 + 0.4 * Math.sin(t * 3 + i) : 0.35);
+    }
     plaque(ctx, x, y + 0.18 * k, k, level ? 'Harzbohrturm Lv ' + level : 'Harzbohrturm', '#ff9ecb');
-    return { x0: x - 2.2 * k, y0: y - 1.8 * k, x1: x + 2.3 * k, y1: y + 0.5 * k };
+    return { x0: x - 2.2 * k, y0: y - (level >= 25 ? 2.8 : 1.8) * k, x1: x + 2.3 * k, y1: y + 0.5 * k };
   }
 
   // ----- Beta 1.7 M2: Packstation – a sorting table with a belt, a crate stack by real fill, a sign; it grows a roof
@@ -629,11 +719,60 @@
         }
       };
     if (level < 10) {
-      // open yard: pallet, fence, sign, crates by real stock
-      fillRR(ctx, x - 1.5 * k, y - 0.12 * k, 3 * k, 0.12 * k, 0.04 * k, C.woodDark);
-      for (let i = 0; i < 6; i++) line(ctx, x - 1.6 * k + i * 0.64 * k, y, x - 1.6 * k + i * 0.64 * k, y - 0.55 * k, 0.07 * k, C.wood);
-      line(ctx, x - 1.6 * k, y - 0.45 * k, x + 1.6 * k, y - 0.45 * k, 0.06 * k, C.wood);
-      crateRow(x - 1.25 * k, y - 0.12 * k, Math.min(10, crates));
+      // Beta 1.8 A6: the first storage is a little wooden shed with a lean-to roof (was a bare fence): an open door with
+      // shelves, a hand cart, a lantern; the yard in front holds the real stock as crates behind a low fence
+      const sx = x + 0.45 * k;
+      // yard: pallet and low fence (left), crates by real stock
+      fillRR(ctx, x - 1.75 * k, y - 0.1 * k, 1.7 * k, 0.1 * k, 0.03 * k, C.woodDark);
+      for (let i = 0; i < 4; i++) line(ctx, x - 1.8 * k + i * 0.55 * k, y, x - 1.8 * k + i * 0.55 * k, y - 0.42 * k, 0.06 * k, C.wood);
+      line(ctx, x - 1.8 * k, y - 0.34 * k, x - 0.15 * k, y - 0.34 * k, 0.05 * k, C.wood);
+      // the shed
+      box(ctx, sx, y, 1.7 * k, 1.05 * k, 0.32 * k, '#d9b48a', '#f0d2a8', '#b98a5e');
+      for (let i = 1; i < 4; i++) line(ctx, sx - 0.85 * k, y - i * 0.26 * k, sx + 0.85 * k, y - i * 0.26 * k, 0.025 * k, 'rgba(120,80,40,0.35)');
+      // lean-to roof in the planet's accent, with a light edge
+      poly(ctx, [[sx - 1.02 * k, y - 1.0 * k], [sx + 1.12 * k, y - 1.32 * k], [sx + 1.12 * k, y - 1.18 * k], [sx - 1.02 * k, y - 0.86 * k]], o.theme.accent);
+      line(ctx, sx - 1.02 * k, y - 1.0 * k, sx + 1.12 * k, y - 1.32 * k, 0.05 * k, 'rgba(255,255,255,0.6)');
+      // P1.5: the depot look on the lean-to roof (a thicker roof so the pattern reads)
+      if (o.skin)
+        roofLook(
+          ctx,
+          o.skin,
+          c => {
+            c.moveTo(sx - 1.06 * k, y - 1.04 * k);
+            c.lineTo(sx + 1.16 * k, y - 1.42 * k);
+            c.lineTo(sx + 1.16 * k, y - 1.14 * k);
+            c.lineTo(sx - 1.06 * k, y - 0.82 * k);
+            c.closePath();
+          },
+          { x0: sx - 1.06 * k, y0: y - 1.42 * k, x1: sx + 1.16 * k, y1: y - 0.82 * k },
+          { x: sx + 0.7 * k, y: y - 1.34 * k },
+          k,
+          t,
+          o
+        );
+      // open door: dark inside, two shelves with crates
+      fillRR(ctx, sx - 0.42 * k, y - 0.78 * k, 0.84 * k, 0.78 * k, 0.08 * k, '#3b3570');
+      line(ctx, sx - 0.38 * k, y - 0.5 * k, sx + 0.38 * k, y - 0.5 * k, 0.04 * k, C.woodDark);
+      line(ctx, sx - 0.38 * k, y - 0.22 * k, sx + 0.38 * k, y - 0.22 * k, 0.04 * k, C.woodDark);
+      if (crates > 2) crate(ctx, sx - 0.18 * k, y - 0.52 * k, 0.24 * k);
+      if (crates > 5) crate(ctx, sx + 0.16 * k, y - 0.24 * k, 0.22 * k, '#ffc08a');
+      // a crate sign over the door
+      fillRR(ctx, sx - 0.3 * k, y - 1.0 * k, 0.6 * k, 0.18 * k, 0.05 * k, '#fff4e2');
+      crate(ctx, sx, y - 0.84 * k, 0.12 * k);
+      // a hand cart beside the shed
+      const cx = sx + 1.15 * k;
+      fillRR(ctx, cx - 0.32 * k, y - 0.42 * k, 0.64 * k, 0.2 * k, 0.05 * k, C.wood);
+      line(ctx, cx + 0.32 * k, y - 0.36 * k, cx + 0.6 * k, y - 0.62 * k, 0.05 * k, C.woodDark);
+      ctx.fillStyle = C.metalDark;
+      ctx.beginPath();
+      ctx.arc(cx - 0.12 * k, y - 0.12 * k, 0.12 * k, 0, TAU);
+      ctx.fill();
+      if (crates > 0) crate(ctx, cx - 0.05 * k, y - 0.42 * k, 0.26 * k, '#ffd77a');
+      // a lantern on the corner (warm while the colony is heated)
+      glow(ctx, sx - 0.95 * k, y - 0.95 * k, 0.28 * k, '#ffe9a8', o.warm === false ? 0.15 : 0.55 + Math.sin(t * 2.4) * 0.08);
+      fillRR(ctx, sx - 1.02 * k, y - 1.02 * k, 0.14 * k, 0.16 * k, 0.04 * k, '#fff3c4');
+      crateRow(x - 1.65 * k, y - 0.1 * k, Math.min(7, crates));
+      if (full) glow(ctx, sx, y - 1.3 * k, 0.4 * k, '#ff8f8f', 0.55 + Math.sin(t * 8) * 0.3);
       plaque(ctx, x, y + 0.18 * k, k, 'Lager Lv ' + level, '#c4b3ff');
       return { x0: x - 1.8 * k, y0: y - 1.8 * k, x1: x + 1.8 * k, y1: y + 0.6 * k };
     }
@@ -651,6 +790,24 @@
     // a pitched warehouse roof with its gable emblem (a crate)
     poly(ctx, [[x - w / 2 - 0.12 * k, y - hgt], [x, y - hgt - (big ? 0.85 : 0.6) * k], [x + w / 2 + 0.12 * k, y - hgt]], o.theme.accent);
     line(ctx, x - w / 2 - 0.12 * k, y - hgt, x, y - hgt - (big ? 0.85 : 0.6) * k, 0.06 * k, 'rgba(255,255,255,0.55)');
+    if (o.skin) {
+      const ridge = y - hgt - (big ? 0.85 : 0.6) * k;
+      roofLook(
+        ctx,
+        o.skin,
+        c => {
+          c.moveTo(x - w / 2 - 0.12 * k, y - hgt);
+          c.lineTo(x, ridge);
+          c.lineTo(x + w / 2 + 0.12 * k, y - hgt);
+          c.closePath();
+        },
+        { x0: x - w / 2 - 0.12 * k, y0: ridge, x1: x + w / 2 + 0.12 * k, y1: y - hgt },
+        { x: x + w * 0.28, y: ridge + (big ? 0.4 : 0.3) * k },
+        k,
+        t,
+        o
+      );
+    }
     crate(ctx, x, y - hgt - 0.12 * k, (big ? 0.34 : 0.28) * k, '#ffd77a', '#c98a3a');
     // rolling door with crates inside (fill-dependent)
     const dw = w * 0.42,
@@ -681,6 +838,12 @@
       });
     }
     if (full) glow(ctx, x, y - hgt - 0.3 * k, 0.4 * k, '#ff8f8f', 0.55 + Math.sin(t * 8) * 0.3);
+    // Beta 1.9 M1: Lv 100 – delivery drones circle the roof with crates while goods arrive (parked on it otherwise)
+    if (level >= 100)
+      for (let i = 0; i < 2; i++) {
+        const a = o.active ? t * 0.9 + i * Math.PI : i * Math.PI;
+        drone(ctx, x + Math.cos(a) * w * 0.55, y - hgt - 1.25 * k + Math.sin(a) * 0.25 * k, k, t, o.active ? '#ffd77a' : null);
+      }
     plaque(ctx, x, y + 0.18 * k, k, 'Lager Lv ' + level, '#c4b3ff');
     return { x0: x - w / 2 - 0.2 * k, y0: y - hgt - 0.9 * k, x1: x + w / 2 + (bay ? 1.5 : 0.5) * k, y1: y + 0.6 * k };
   }
@@ -737,16 +900,84 @@
       conveyor(ctx, x - w / 2, y - 0.35 * k, x - 1.15 * k, y - 0.35 * k, k, active, t, o.theme.accent);
       gear(ctx, x - w / 2 + 0.35 * k, y - hgt + 0.45 * k, 0.2 * k, active ? t * 3 : 0, C.metalDark);
     }
+    // Beta 1.9 M1: Lv 50 – the Kristallschmelze: a glass dome on the hall where the melt glows in the planet's colour;
+    // Lv 100 – an induction tower with a field ring over the plant
+    if (level >= 50) {
+      const dy = y - hgt;
+      ctx.fillStyle = 'rgba(200,240,255,0.5)';
+      ctx.beginPath();
+      ctx.ellipse(x - 0.15 * k, dy, 0.7 * k, 0.55 * k, 0, Math.PI, 0);
+      ctx.fill();
+      glow(ctx, x - 0.15 * k, dy - 0.15 * k, 0.55 * k, o.theme.accent, active ? 0.55 + Math.sin(t * 3) * 0.12 : 0.2);
+      crystal(ctx, x - 0.15 * k, dy - 0.05 * k, 0.32 * k, o.theme.accent, 0);
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 0.04 * k;
+      ctx.beginPath();
+      ctx.ellipse(x - 0.15 * k, dy, 0.7 * k, 0.55 * k, 0, Math.PI, 0);
+      ctx.stroke();
+    }
+    if (level >= 100) {
+      const tx = x - w / 2 + 0.2 * k,
+        top = y - hgt - 2.1 * k;
+      fillRR(ctx, tx - 0.14 * k, top, 0.28 * k, 2.1 * k, 0.08 * k, C.steel);
+      ctx.strokeStyle = active ? C.mint : '#a9a3d8';
+      ctx.lineWidth = 0.07 * k;
+      ctx.beginPath();
+      ctx.ellipse(tx, top + 0.35 * k + (active ? Math.sin(t * 2) * 0.15 * k : 0), 0.5 * k, 0.14 * k, 0, 0, TAU);
+      ctx.stroke();
+      glow(ctx, tx, top, 0.25 * k, active ? C.mint : C.warm, 0.9);
+    }
     // bars produced (real stock)
     const bars = Math.round(Math.max(0, Math.min(1, o.bars || 0)) * 6),
       bx = x + w / 2 + (big ? 1.15 : 0.35) * k;
     for (let i = 0; i < bars; i++) fillRR(ctx, bx + (i % 3) * 0.26 * k, y - 0.14 * k - Math.floor(i / 3) * 0.16 * k, 0.24 * k, 0.13 * k, 0.03 * k, i % 2 ? '#ffe38a' : '#ffd23a');
     plaque(ctx, x, y + 0.18 * k, k, 'Raffinerie Lv ' + level, '#ffb35a');
-    return { x0: x - 2 * k, y0: y - hgt - 1.5 * k, x1: x + w / 2 + 1.6 * k, y1: y + 0.6 * k };
+    return { x0: x - 2 * k, y0: y - hgt - (level >= 100 ? 2.2 : 1.5) * k, x1: x + w / 2 + 1.6 * k, y1: y + 0.6 * k };
   }
 
   // ----- Trade: market stall (1) → trade booth (10) → commercial outpost (25) → trading station (50) -----
+  // P1.3: building looks (Commerce slot 'stall'): the stall's awning, roof and string lights
+  // Building looks of the market stall (the cosmetic slot 'stall'): the awning's stripes, the kiosk roof and the string
+  // lights. P1.4: the Raureif-Markise adds icicles under the awning and a glint that runs along them; on the planet stalls
+  // (Glacies, Pyra, Viridia keep their own building) the look shows as a pennant line with its lights (stallAccent)
+  const STALL_SKINS = {
+    'stall-sunset': { awning: ['#ffb35a', '#fff4e2'], roof: '#ff8a5a', lights: ['#ffd27a', '#ff9a4a', '#fff4e2'] },
+    'stall-frost': { awning: ['#9fdcf4', '#f2fcff'], roof: '#7fc4e6', lights: ['#e8fbff', '#9fe8ff', '#c4a3ff'], icicles: '#e8fbff' }
+  };
+  // icicles under an awning edge: a row of small ice teeth, one catching the light at a time
+  function awningIcicles(ctx, ax, ay, w, k, color, t) {
+    const n = 10,
+      lit = Math.floor(((t * 1.5) % 1) * n);
+    for (let i = 0; i < n; i++) {
+      const ix = ax - w / 2 + ((i + 0.5) * w) / n,
+        len = (i % 3 === 1 ? 0.3 : 0.18) * k;
+      ctx.fillStyle = i === lit ? '#ffffff' : color;
+      ctx.beginPath();
+      ctx.moveTo(ix - 0.06 * k, ay);
+      ctx.lineTo(ix, ay + len);
+      ctx.lineTo(ix + 0.06 * k, ay);
+      ctx.closePath();
+      ctx.fill();
+      if (i === lit) glow(ctx, ix, ay + len * 0.5, 0.18 * k, '#bff4ff', 0.7);
+    }
+  }
+  // a stall look on a planet's own stall: a pennant line in the look's colours with its lights across the top
+  function stallAccent(ctx, id, x, top, k, t) {
+    const skin = STALL_SKINS[id];
+    if (!skin) return;
+    const w = 2.6 * k,
+      n = 7;
+    line(ctx, x - w / 2, top, x + w / 2, top, 0.035 * k, 'rgba(60,50,90,0.7)');
+    for (let i = 0; i < n; i++) {
+      const px = x - w / 2 + ((i + 0.5) * w) / n,
+        sag = Math.sin(((i + 0.5) / n) * Math.PI) * 0.16 * k;
+      poly(ctx, [[px - 0.13 * k, top + sag], [px + 0.13 * k, top + sag], [px, top + sag + 0.32 * k]], skin.awning[i % 2]);
+      glow(ctx, px, top + sag - 0.04 * k, 0.07 * k, skin.lights[i % 3], 0.85 + Math.sin(t * 3 + i) * 0.12);
+    }
+    if (skin.icicles) awningIcicles(ctx, x, top + 0.1 * k, w * 0.8, k * 0.8, skin.icicles, t);
+  }
   function stall(ctx, x, y, k, o) {
+    const skin = STALL_SKINS[o.skin] || { awning: ['#ff9ecb', '#ffffff'], roof: '#ff9ecb', lights: ['#ffe26b', '#ff9ecb', '#8ff0d4'] };
     const level = o.level,
       t = o.time,
       fill = Math.max(0, Math.min(1, o.fill || 0));
@@ -764,6 +995,7 @@
         ctx.closePath();
         ctx.fill();
       }
+      if (skin.icicles) awningIcicles(ctx, ax, ay + 0.36 * k, w * 0.92, k, skin.icicles, t);
     };
     const goods = (gx, gy, n) => {
       for (let i = 0; i < n; i++) crystal(ctx, gx + i * 0.3 * k, gy, 0.26 * k, i % 2 ? o.theme.accent : '#fff4ff', 0);
@@ -813,7 +1045,7 @@
         plaque(ctx, x, y - 2.45 * k, k, 'HANDELSKONTOR', '#ffd23a');
       }
       top = y - 1.1 * k;
-      awning(x, top, 3 * k, ['#ff9ecb', '#ffffff']);
+      awning(x, top, 3 * k, skin.awning);
       // display counter: glass front with lit goods, wooden base with panels
       fillRR(ctx, x - 1.4 * k, y - 0.62 * k, 2.8 * k, 0.62 * k, 0.1 * k, '#b98a5e');
       for (let i = 0; i < 4; i++) fillRR(ctx, x - 1.3 * k + i * 0.68 * k, y - 0.5 * k, 0.6 * k, 0.4 * k, 0.06 * k, '#c99a6a');
@@ -824,7 +1056,8 @@
     } else if (level >= 10) {
       // trade booth: wooden kiosk with roof, display shelf, scale, banner
       box(ctx, x, y, 2.6 * k, 1.5 * k, 0.35 * k, '#d9b48a', '#f0d2a8', '#b98a5e');
-      poly(ctx, [[x - 1.6 * k, y - 1.5 * k], [x, y - 2.3 * k], [x + 1.6 * k, y - 1.5 * k]], '#ff9ecb');
+      poly(ctx, [[x - 1.6 * k, y - 1.5 * k], [x, y - 2.3 * k], [x + 1.6 * k, y - 1.5 * k]], skin.roof);
+      if (skin.icicles) awningIcicles(ctx, x, y - 1.5 * k, 3 * k, k, skin.icicles, t);
       fillRR(ctx, x - 1.1 * k, y - 1.3 * k, 2.2 * k, 0.6 * k, 0.08 * k, '#4a4f86');
       goods(x - 0.9 * k, y - 0.82 * k, Math.round(fill * 7));
       line(ctx, x + 1.45 * k, y, x + 1.45 * k, y - 2 * k, 0.06 * k, C.woodDark);
@@ -834,12 +1067,34 @@
       // hand-built market stall
       line(ctx, x - 1.1 * k, y, x - 1.1 * k, y - 1.6 * k, 0.09 * k, C.woodDark);
       line(ctx, x + 1.1 * k, y, x + 1.1 * k, y - 1.6 * k, 0.09 * k, C.woodDark);
-      awning(x, y - 1.7 * k, 2.5 * k, ['#ff9ecb', '#ffffff']);
+      awning(x, y - 1.7 * k, 2.5 * k, skin.awning);
       fillRR(ctx, x - 1.15 * k, y - 0.62 * k, 2.3 * k, 0.62 * k, 0.08 * k, C.wood);
       for (let i = 0; i < 3; i++) line(ctx, x - 1.1 * k, y - 0.5 * k + i * 0.18 * k, x + 1.1 * k, y - 0.5 * k + i * 0.18 * k, 0.03 * k, C.woodDark);
       goods(x - 0.9 * k, y - 0.7 * k, Math.round(fill * 6));
       crate(ctx, x + 1.45 * k, y, 0.45 * k);
+      // Beta 1.8 A6: string lights under the awning and a hanging crystal sign – the stall reads as a shop from afar
+      for (let i = 0; i < 7; i++) {
+        const lx = x - 1.05 * k + i * 0.35 * k,
+          ly = y - 1.36 * k + Math.sin((i / 6) * Math.PI) * 0.12 * k;
+        glow(ctx, lx, ly, 0.08 * k, skin.lights[i % 3], 0.9 + Math.sin(t * 3 + i) * 0.1);
+      }
+      line(ctx, x + 1.1 * k, y - 1.3 * k, x + 1.6 * k, y - 1.3 * k, 0.05 * k, C.woodDark);
+      line(ctx, x + 1.45 * k, y - 1.3 * k, x + 1.45 * k, y - 1.12 * k, 0.03 * k, C.woodDark);
+      fillRR(ctx, x + 1.22 * k, y - 1.14 * k, 0.46 * k, 0.4 * k, 0.08 * k, '#fff4e2');
+      crystal(ctx, x + 1.45 * k, y - 0.82 * k, 0.24 * k, o.theme.accent, 0);
       top = y - 1.7 * k;
+    }
+    // Beta 1.9 M1: Lv 100 – the Galaktische Börse: a holo ring above the dome, two drones flying goods in
+    if (level >= 100) {
+      ctx.strokeStyle = 'rgba(143,240,212,0.55)';
+      ctx.lineWidth = 0.06 * k;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 3.85 * k, 1.5 * k, 0.28 * k, 0, 0, TAU);
+      ctx.stroke();
+      for (let i = 0; i < 2; i++) {
+        const a = t * 0.7 + i * Math.PI;
+        drone(ctx, x + Math.cos(a) * 1.5 * k, y - 3.85 * k + Math.sin(a) * 0.28 * k, k * 0.8, t, i ? o.theme.accent : '#ffd77a');
+      }
     }
     if (o.saleGlow > 0) glow(ctx, x, y - 0.9 * k, 1 * k, C.warm, o.saleGlow * 0.6);
     plaque(ctx, x, y + 0.18 * k, k, 'Verkauf Lv ' + level, C.warm);
@@ -881,10 +1136,46 @@
       }
       windowPane(ctx, hx - 0.38 * s, y - 0.62 * s, 0.24 * s, 0.24 * s, o.warm !== false, t + i);
       fillRR(ctx, hx + 0.08 * s, y - 0.42 * s, 0.26 * s, 0.42 * s, 0.12 * s, '#c4b3ff');
+      // Beta 1.8 A6: a lived-in home – a little chimney that smokes while it is warm, a light over the door, a flower pot
+      if (i === 0) {
+        fillRR(ctx, hx + 0.3 * s, y - 1.18 * s, 0.16 * s, 0.32 * s, 0.04 * s, '#b98a5e');
+        fillRR(ctx, hx + 0.27 * s, y - 1.22 * s, 0.22 * s, 0.07 * s, 0.03 * s, '#8f6a48');
+        if (o.warm !== false) steam(ctx, hx + 0.38 * s, y - 1.25 * s, k * 0.6, t + 1.3);
+      }
+      glow(ctx, hx + 0.21 * s, y - 0.5 * s, 0.14 * s, '#fff3c4', o.warm === false ? 0.2 : 0.6);
+      fillRR(ctx, hx - 0.56 * s, y - 0.18 * s, 0.18 * s, 0.18 * s, 0.05 * s, '#d98a6a');
+      ctx.fillStyle = i % 2 ? '#ff9ecb' : '#ffd77a';
+      ctx.beginPath();
+      ctx.arc(hx - 0.47 * s, y - 0.25 * s, 0.07 * s, 0, TAU);
+      ctx.fill();
+      if (level >= 5 && i === 0) {
+        line(ctx, hx - 0.15 * s, y - 1.0 * s, hx - 0.28 * s, y - 1.42 * s, 0.03 * k, C.metalDark);
+        glow(ctx, hx - 0.28 * s, y - 1.44 * s, 0.07 * s, Math.sin(t * 3 + i) > 0 ? C.mint : '#ffe9a8', 1);
+      }
       if (level >= 25 && i === Math.floor(count / 2)) {
         line(ctx, hx + 0.45 * s, y - 1.0 * s, hx + 0.45 * s, y - 1.7 * s, 0.04 * k, C.woodDark);
         poly(ctx, [[hx + 0.45 * s, y - 1.7 * s], [hx + 0.85 * s, y - 1.6 * s], [hx + 0.45 * s, y - 1.48 * s]], C.pink);
       }
+    }
+    // Beta 1.9 M1: Lv 100 – a glass greenhouse dome beside the homes (green inside, lit) and a satellite dish
+    if (level >= 100) {
+      const gx = x + (count * 0.7 + 0.55) * k;
+      ctx.fillStyle = 'rgba(200,240,255,0.5)';
+      ctx.beginPath();
+      ctx.ellipse(gx, y, 0.62 * k, 0.75 * k, 0, Math.PI, 0);
+      ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = i % 2 ? '#7fd08a' : '#9be06b';
+        ctx.beginPath();
+        ctx.arc(gx - 0.3 * k + i * 0.3 * k, y - 0.12 * k, 0.16 * k, 0, TAU);
+        ctx.fill();
+      }
+      glow(ctx, gx, y - 0.4 * k, 0.5 * k, '#ffe9a8', 0.25);
+      line(ctx, gx, y - 0.75 * k, gx + 0.2 * k, y - 1.2 * k, 0.04 * k, C.metalDark);
+      ctx.fillStyle = '#e8e4fa';
+      ctx.beginPath();
+      ctx.ellipse(gx + 0.25 * k, y - 1.25 * k, 0.28 * k, 0.12 * k, -0.6, 0, TAU);
+      ctx.fill();
     }
     plaque(ctx, x, y + 0.18 * k, k, 'Helfer Lv ' + level, '#fff4e2');
     return { x0: x - (count * 0.7 + 0.2) * k, y0: y - 1.8 * k, x1: x + (count * 0.7 + 0.2) * k, y1: y + 0.6 * k };
@@ -910,6 +1201,30 @@
     }
     line(ctx, x + 2 * k, y, x + 2 * k, y - 1.8 * k, 0.07 * k, '#e8e4fa');
     glow(ctx, x + 2 * k, y - 1.85 * k, 0.15 * k, Math.sin(t * 3) > 0 ? C.mint : C.pink, 1);
+    // Beta 1.9 M1: the first tiers get a freight shed behind the pad (door, roof, FRACHT sign), so the dock reads as a
+    // place from the start; Lv 100 a control tower with a turning radar dish
+    if (level < 30) {
+      box(ctx, x + 2.95 * k, y, 1.1 * k, 0.95 * k, 0.25 * k, '#d9d3f5', '#f4f2ff', '#bdb6e6');
+      fillRR(ctx, x + 2.7 * k, y - 0.62 * k, 0.5 * k, 0.62 * k, 0.05 * k, '#4a4f86');
+      fillRR(ctx, x + 2.35 * k, y - 1.2 * k, 1.2 * k, 0.24 * k, 0.07 * k, 'rgba(29,33,80,0.9)');
+      ctx.fillStyle = C.mint;
+      ctx.font = `900 ${Math.max(7, Math.round(0.17 * k))}px Nunito, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('FRACHT', x + 2.95 * k, y - 1.03 * k);
+      ctx.textAlign = 'left';
+    }
+    if (level >= 100) {
+      const tx = x + 3.6 * k,
+        top = y - 3.6 * k;
+      fillRR(ctx, tx - 0.18 * k, top, 0.36 * k, 3.6 * k, 0.08 * k, '#e8e4fa');
+      fillRR(ctx, tx - 0.45 * k, top - 0.35 * k, 0.9 * k, 0.4 * k, 0.12 * k, '#4a4f86');
+      windowPane(ctx, tx - 0.35 * k, top - 0.3 * k, 0.7 * k, 0.24 * k, true, t);
+      const a = t * 1.2;
+      ctx.fillStyle = '#c9d2ea';
+      ctx.beginPath();
+      ctx.ellipse(tx, top - 0.55 * k, 0.35 * k * Math.abs(Math.cos(a)) + 0.04 * k, 0.12 * k, 0, 0, TAU);
+      ctx.fill();
+    }
     if (level >= 5) {
       line(ctx, x - 2.1 * k, y, x - 2.1 * k, y - 2.1 * k, 0.12 * k, C.hazard);
       line(ctx, x - 2.2 * k, y - 2.1 * k, x - 0.9 * k, y - 2.1 * k, 0.12 * k, C.hazard);
@@ -928,8 +1243,17 @@
       box(ctx, x + 2.8 * k, y, 0.8 * k, 2.4 * k, 0.25 * k, '#e8e4fa', '#ffffff', '#c4bfe6');
       windowPane(ctx, x + 2.5 * k, y - 2.3 * k, 0.6 * k, 0.35 * k, true, t);
     }
-    if (o.queue)
-      for (let i = 0; i < 6; i++) crate(ctx, x - 0.9 * k + (i % 3) * 0.4 * k, y - Math.floor(i / 3) * 0.38 * k, 0.36 * k, i % 2 ? '#ffc08a' : '#ffd77a');
+    // Beta 1.9 M2: the pad holds the goods the porters really brought (o.pad 0..1); without hauls the old queue sign
+    const stack = o.pad !== undefined ? (o.pad > 0.02 ? Math.max(1, Math.round(o.pad * 6)) : 0) : o.queue ? 6 : 0;
+    for (let i = 0; i < stack; i++) crate(ctx, x - 0.9 * k + (i % 3) * 0.4 * k, y - Math.floor(i / 3) * 0.38 * k, 0.36 * k, i % 2 ? '#ffc08a' : '#ffd77a');
+    // while the freight really loads, one crate after another rises from the stack into the hold above
+    if (o.freighting) {
+      const f = (t * 0.7) % 1;
+      ctx.globalAlpha = 1 - f;
+      crate(ctx, x - 0.5 * k, y - 0.4 * k - f * 1.6 * k, 0.32 * k, '#ffd77a', '#c98a2a');
+      ctx.globalAlpha = 1;
+      glow(ctx, x - 0.5 * k, y - 0.9 * k, 0.5 * k, C.mint, 0.18);
+    }
     plaque(ctx, x, y + 0.36 * k, k, 'Frachtdock Lv ' + level, C.mint);
     return { x0: x - 2.4 * k, y0: y - 2.4 * k, x1: x + 2.4 * k, y1: y + 0.8 * k };
   }
@@ -992,12 +1316,27 @@
       line(ctx, x - 0.9 * k, y - 1.4 * k, x - 0.9 * k, y - 2.4 * k, 0.08 * k, C.steel);
       glow(ctx, x - 0.9 * k, y - 2.45 * k, 0.14 * k, working ? '#8ff0d4' : '#5a5f8a', 1);
     }
+    // Beta 1.9 M1: Lv 25 – a second cryo arm on a gantry and a belt carrying quartz into the building; Lv 50 – a cryo
+    // tower (a tall frosted cylinder that vents cold mist while it drills)
+    if (level >= 25) {
+      const r2 = working ? Math.cos(t * 7) * 0.05 * k : 0;
+      line(ctx, x + 0.2 * k, y - 1.25 * k, x + 0.95 * k + r2, y - 1.05 * k, 0.11 * k, C.metalDark);
+      poly(ctx, [[x + 0.9 * k + r2, y - 1.18 * k], [x + 1.25 * k + r2, y - 1.05 * k], [x + 0.9 * k + r2, y - 0.92 * k]], '#c8fbff');
+      conveyor(ctx, x + 1.4 * k, y - 0.15 * k, x + 0.3 * k, y - 0.45 * k, k * 0.7, working, t, '#9fe8ff');
+    }
+    if (level >= 50) {
+      const tx = x - 2.15 * k;
+      fillRR(ctx, tx - 0.35 * k, y - 2.9 * k, 0.7 * k, 2.9 * k, 0.3 * k, '#e9f7ff');
+      for (let i = 0; i < 3; i++) fillRR(ctx, tx - 0.35 * k, y - (0.8 + i * 0.75) * k, 0.7 * k, 0.08 * k, 0.04 * k, '#8fe3ff');
+      glow(ctx, tx, y - 3 * k, 0.3 * k, working ? '#c8fbff' : '#5a5f8a', 0.9);
+      if (working) for (let i = 0; i < 3; i++) glow(ctx, tx + Math.sin(t + i) * 0.2 * k, y - 3.2 * k - ((t * 0.6 + i / 3) % 1) * 0.8 * k, 0.25 * k, '#e8fdff', 0.35);
+    }
     if (frozen) icicles(ctx, x - 1.3 * k, y - (big ? 1.5 : 1.1) * k, (big ? 1.6 : 1.2) * k, k, t);
     // frost quartz stock crates
     const stock = Math.round(Math.max(0, Math.min(1, o.fill || 0)) * 6);
     for (let i = 0; i < stock; i++) crate(ctx, x - 2 * k + (i % 3) * 0.38 * k, y - Math.floor(i / 3) * 0.36 * k, 0.34 * k, '#bfefff', '#6fb6c9');
     plaque(ctx, x, y + 0.18 * k, k, 'Frostquarz Lv ' + level, '#9fe8ff');
-    return { x0: x - 2.3 * k, y0: y - 2.6 * k, x1: x + 2.2 * k, y1: y + 0.6 * k };
+    return { x0: x - 2.3 * k, y0: y - (level >= 50 ? 3.1 : 2.6) * k, x1: x + 2.2 * k, y1: y + 0.6 * k };
   }
   function thermalWorkshop(ctx, x, y, k, o) {
     const level = o.level,
@@ -1031,6 +1370,29 @@
         cy = y - Math.floor(i / 3) * 0.4 * k;
       fillRR(ctx, cx - 0.12 * k, cy - 0.36 * k, 0.24 * k, 0.36 * k, 0.08 * k, '#ffb35a');
       fillRR(ctx, cx - 0.08 * k, cy - 0.28 * k, 0.16 * k, 0.14 * k, 0.04 * k, '#fff3c4');
+    }
+    // Beta 1.9 M1: Lv 25 – two heat exchangers with fins on the roof (their plumes rise while cells are made); Lv 50 –
+    // the Wärmewerk: a reactor dome beside the hall with a glowing ring
+    if (level >= 25)
+      [-0.55, 0.55].forEach((dx, i) => {
+        const fx = x + dx * k,
+          top = y - hgt - 0.95 * k;
+        fillRR(ctx, fx - 0.2 * k, top, 0.4 * k, 0.75 * k, 0.08 * k, '#f0cdb6');
+        for (let f = 0; f < 4; f++) line(ctx, fx - 0.28 * k, top + 0.12 * k + f * 0.15 * k, fx + 0.28 * k, top + 0.12 * k + f * 0.15 * k, 0.04 * k, '#d9a88a');
+        if (active) steam(ctx, fx, top - 0.1 * k, k, t + i);
+      });
+    if (level >= 50) {
+      const dx = x - w / 2 - 1.05 * k;
+      ctx.fillStyle = '#fff1e6';
+      ctx.beginPath();
+      ctx.ellipse(dx, y, 0.75 * k, 1.05 * k, 0, Math.PI, 0);
+      ctx.fill();
+      ctx.strokeStyle = active ? '#ffb35a' : '#9a8aa8';
+      ctx.lineWidth = 0.08 * k;
+      ctx.beginPath();
+      ctx.ellipse(dx, y - 0.55 * k, 0.6 * k, 0.16 * k, 0, 0, TAU);
+      ctx.stroke();
+      if (active) glow(ctx, dx, y - 0.55 * k, 0.7 * k, '#ffb35a', 0.35 + Math.sin(t * 4) * 0.1);
     }
     if (!heated) icicles(ctx, x - w / 2, y - hgt - 0.05 * k, w, k, t);
     plaque(ctx, x, y + 0.18 * k, k, 'Thermalwerkstatt Lv ' + level, '#ffb35a');
@@ -1181,6 +1543,21 @@
     };
     if (level >= 10) dome(x + 1.55 * k, 0.9 * k, 0.8 * k);
     dome(x, 1.55 * k, 1.35 * k);
+    // P1.5: the depot look covers the upper dome as its roof (the gauge and the entrance stay readable below)
+    if (o.skin)
+      roofLook(
+        ctx,
+        o.skin,
+        c => {
+          c.ellipse(x, y, 1.55 * k, 1.35 * k, 0, Math.PI * 1.12, Math.PI * 1.88);
+          c.closePath();
+        },
+        { x0: x - 1.3 * k, y0: y - 1.35 * k, x1: x + 1.3 * k, y1: y - 0.7 * k },
+        { x: x + 0.55 * k, y: y - 1.26 * k },
+        k,
+        t,
+        o
+      );
     // entrance tunnel with light from inside
     fillRR(ctx, x - 0.42 * k, y - 0.82 * k, 0.84 * k, 0.82 * k, 0.4 * k, '#5d88bb');
     fillRR(ctx, x - 0.3 * k, y - 0.7 * k, 0.6 * k, 0.7 * k, 0.3 * k, warm ? '#ffd9a0' : '#2c4f7a');
@@ -1232,13 +1609,28 @@
     ctx.quadraticCurveTo(x, y - 1.95 * k, x + 1.55 * k, y - 1.05 * k);
     ctx.closePath();
     ctx.fill();
-    icicles(ctx, x - 1.4 * k, y - 1.05 * k, 2.8 * k, k * 0.5, 7);
+    // P1.5: a stall look is the snow roof's own awning (its stripes over the roof's shape, its icicles and lights)
+    const look = o.skin
+      ? stallRoof(
+          ctx,
+          o.skin,
+          c => {
+            c.moveTo(x - 1.55 * k, y - 1.05 * k);
+            c.quadraticCurveTo(x, y - 1.95 * k, x + 1.55 * k, y - 1.05 * k);
+            c.closePath();
+          },
+          { x0: x - 1.55 * k, y0: y - 1.55 * k, x1: x + 1.55 * k, y1: y - 1.05 * k },
+          k
+        )
+      : null;
+    if (look?.icicles) awningIcicles(ctx, x, y - 1.02 * k, 2.8 * k, k, look.icicles, t);
+    else icicles(ctx, x - 1.4 * k, y - 1.05 * k, 2.8 * k, k * 0.5, 7);
     // lanterns (more with levels)
     const lanterns = level >= 10 ? 3 : 2;
     for (let i = 0; i < lanterns; i++) {
       const lx = x - 1.0 * k + (i * 2.0 * k) / (lanterns - 1);
       line(ctx, lx, y - 1.05 * k, lx, y - 0.85 * k, 0.025 * k, '#5d88bb');
-      glow(ctx, lx, y - 0.78 * k, 0.16 * k, '#ffd77a', 0.75 + Math.sin(t * 2 + i) * 0.1);
+      glow(ctx, lx, y - 0.78 * k, 0.16 * k, look ? look.lights[i % 3] : '#ffd77a', 0.75 + Math.sin(t * 2 + i) * 0.1);
     }
     if (level >= 25) plaque(ctx, x, y - 2.25 * k, k, 'FROSTMARKT', '#9fe8ff');
     if (o.saleGlow > 0) glow(ctx, x, y - 0.9 * k, 1 * k, '#9fe8ff', o.saleGlow * 0.6);
@@ -1246,9 +1638,554 @@
     return { x0: x - 1.7 * k, y0: y - 2.0 * k, x1: x + 1.7 * k, y1: y + 0.6 * k, counter: { x0: x - 1.1 * k, y0: y - 1.0 * k, x1: x + 1.1 * k, y1: y } };
   }
 
+  // ----- Beta 1.9 M1: tiers for the planet-specific buildings (Eis-/Basalt-/Wurzellager, Frost-/Glut-/Blütenmarkt,
+  // Glutschmelze, Präzisionswerkstatt, Sporengarten, Biolabor). Their own art barely changed with the level; annexes
+  // in the world's style stand behind them (drawn first): a silo or lantern row (Lv 10), a tower or gate (Lv 25), a
+  // dome, beacon or landmark (Lv 50). The building itself and its tap area stay as they were.
+  const ANNEX_STYLE = {
+    ice: { body: '#e9f7ff', trim: '#8fe3ff', dark: '#6fb6c9', glow: '#c8fbff' },
+    volcanic: { body: '#4a3a4a', trim: '#ff8a3a', dark: '#2f2433', glow: '#ffb35a' },
+    machine: { body: '#c9d2ea', trim: '#8ff0d4', dark: '#6f7da8', glow: '#8ff0d4' },
+    verdant: { body: '#c8a46a', trim: '#7fd08a', dark: '#7a5a38', glow: '#e8ff9a' }
+  };
+  function planetAnnex(ctx, kind, x, y, k, level, planet, t, active) {
+    const s = ANNEX_STYLE[planet];
+    if (!s || !(level >= 10)) return;
+    const market = kind === 'stall',
+      side = kind === 'depot' ? 1 : -1;
+    if (market) {
+      // Lv 10: a lantern row in the world's light; Lv 25: a gate arch over the way in; Lv 50: a beacon with the light
+      for (let i = 0; i < 4; i++) {
+        const lx = x - 1.9 * k + i * 1.25 * k;
+        line(ctx, lx, y, lx, y - 1.5 * k, 0.05 * k, s.dark);
+        glow(ctx, lx, y - 1.55 * k, 0.13 * k, s.glow, 0.75 + 0.2 * Math.sin(t * 2 + i));
+      }
+      if (level >= 25) {
+        ctx.strokeStyle = s.trim;
+        ctx.lineWidth = 0.14 * k;
+        ctx.beginPath();
+        ctx.arc(x, y, 2.3 * k, Math.PI * 1.08, Math.PI * 1.92);
+        ctx.stroke();
+      }
+      if (level >= 50) {
+        const bx = x + 2.4 * k;
+        fillRR(ctx, bx - 0.2 * k, y - 3.2 * k, 0.4 * k, 3.2 * k, 0.12 * k, s.body);
+        fillRR(ctx, bx - 0.32 * k, y - 3.45 * k, 0.64 * k, 0.32 * k, 0.12 * k, s.trim);
+        glow(ctx, bx, y - 3.3 * k, 0.45 * k, s.glow, active ? 0.7 + 0.2 * Math.sin(t * 3) : 0.4);
+      }
+      return;
+    }
+    // Lv 10: a silo or store tower beside it (its band glows while the building works)
+    const sx = x + side * 2.1 * k;
+    fillRR(ctx, sx - 0.38 * k, y - 1.9 * k, 0.76 * k, 1.9 * k, 0.32 * k, s.body);
+    fillRR(ctx, sx - 0.38 * k, y - 1.25 * k, 0.76 * k, 0.12 * k, 0.05 * k, active ? s.trim : s.dark);
+    if (level >= 25) {
+      // Lv 25: a lattice tower behind, crowned with the world's light
+      const tx = x - side * 1.3 * k,
+        top = y - 3.1 * k;
+      line(ctx, tx - 0.4 * k, y, tx - 0.1 * k, top, 0.06 * k, s.dark);
+      line(ctx, tx + 0.4 * k, y, tx + 0.1 * k, top, 0.06 * k, s.dark);
+      for (let yy = y - 0.5 * k; yy > top + 0.2 * k; yy -= 0.5 * k) {
+        const half = 0.4 * k - 0.3 * k * ((y - yy) / (y - top));
+        line(ctx, tx - half, yy, tx + half, yy, 0.035 * k, s.dark);
+      }
+      glow(ctx, tx, top, 0.22 * k, s.glow, active ? 0.95 : 0.5);
+    }
+    if (level >= 50) {
+      // Lv 50: a dome behind the building, lit from inside while it works
+      ctx.fillStyle = s.body + 'cc';
+      ctx.beginPath();
+      ctx.ellipse(x + side * 0.4 * k, y, 1.9 * k, 2.4 * k, 0, Math.PI, 0);
+      ctx.fill();
+      ctx.strokeStyle = s.trim;
+      ctx.lineWidth = 0.06 * k;
+      ctx.beginPath();
+      ctx.ellipse(x + side * 0.4 * k, y, 1.9 * k, 2.4 * k, 0, Math.PI, 0);
+      ctx.stroke();
+      glow(ctx, x + side * 0.4 * k, y - 1.6 * k, 1.1 * k, s.glow, active ? 0.35 + 0.1 * Math.sin(t * 2) : 0.15);
+    }
+  }
+
+  // ----- Beta 1.9 M1: a small cargo drone (Lv 100 tiers): body, rotor glow, optional crate under it -----
+  function drone(ctx, x, y, k, t, carry) {
+    fillRR(ctx, x - 0.28 * k, y - 0.1 * k, 0.56 * k, 0.2 * k, 0.09 * k, '#e8e4fa');
+    line(ctx, x - 0.42 * k, y - 0.14 * k, x + 0.42 * k, y - 0.14 * k, 0.03 * k, C.metalDark);
+    glow(ctx, x - 0.42 * k, y - 0.16 * k, 0.1 * k, C.mint, 0.5 + 0.3 * Math.sin(t * 20));
+    glow(ctx, x + 0.42 * k, y - 0.16 * k, 0.1 * k, C.mint, 0.5 + 0.3 * Math.cos(t * 20));
+    if (carry) {
+      line(ctx, x, y + 0.1 * k, x, y + 0.22 * k, 0.02 * k, C.ink);
+      crate(ctx, x, y + 0.48 * k, 0.26 * k, carry, '#c98a2a');
+    }
+  }
+
+  // ----- Beta 1.9 M2/M3: the hand-overs' carriers (logistics.js) -----
+  // A load as the economy holds it: crystals (raw), crates (packed) or gold bars, 1–3 pieces by the run's real fill.
+  function haulLoad(ctx, x, y, k, goods, fill, accent) {
+    const n = fill > 0.02 ? Math.max(1, Math.min(3, Math.round(fill * 3))) : 0;
+    for (let i = 0; i < n; i++) {
+      const lx = x + (i - (n - 1) / 2) * 0.24 * k,
+        ly = y - (i === 1 ? 0.08 * k : 0);
+      if (goods === 'bars') {
+        fillRR(ctx, lx - 0.14 * k, ly - 0.1 * k, 0.28 * k, 0.1 * k, 0.025 * k, '#ffd23a');
+        fillRR(ctx, lx - 0.1 * k, ly - 0.18 * k, 0.2 * k, 0.09 * k, 0.025 * k, '#ffe38a');
+      } else if (goods === 'packed') crate(ctx, lx, ly, 0.26 * k, '#ffc95a', '#c98a2a');
+      else crystal(ctx, lx, ly - 0.06 * k, 0.24 * k, i % 2 ? accent : '#fff4ff', 0);
+    }
+  }
+  // The carrier by tier (the kitten that moves it is drawn by the scene): 2 a wheelbarrow, 3 a small wagon on four
+  // wheels, 4 a hover pallet. Each world builds its own: Glacies slides on runners (sled, hooded sled), Pyra's carts
+  // are dark heat-shielded metal with a glowing rim, Mekhanos rolls robot carts with a status light, Viridia carries
+  // in woven baskets and leaf wagons. o: { tier, dir, goods, fill, tilt, time, accent, planet }.
+  function haulCarrier(ctx, x, y, k, o) {
+    const sk = vehicleSkin(o.skin),
+      paint = (def, part = 'body') => (sk ? sk[part] : def),
+      orn = (x0, y0, w, h) => vehicleOrnament(ctx, sk, x0, y0, w, h, k, o.time || 0, { loaded: (o.fill || 0) > 0.02, moving: Boolean(o.moving), reduced: o.reduced });
+    ctx.save();
+    ctx.translate(x, y);
+    if (o.dir < 0) ctx.scale(-1, 1);
+    if (o.tilt) {
+      ctx.translate(0.3 * k, -0.1 * k);
+      ctx.rotate(-o.tilt);
+      ctx.translate(-0.3 * k, 0.1 * k);
+    }
+    const wheel = (wx, r) => {
+      ctx.fillStyle = C.ink;
+      ctx.beginPath();
+      ctx.arc(wx * k, -0.06 * k, r * k, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = C.metal;
+      ctx.beginPath();
+      ctx.arc(wx * k, -0.06 * k, r * 0.45 * k, 0, TAU);
+      ctx.fill();
+    };
+    if (o.tier >= 4) {
+      const hover = Math.sin((o.time || 0) * 3 + x * 0.01) * 0.035 * k;
+      ctx.translate(0, hover - 0.16 * k);
+      glow(ctx, 0, 0.1 * k, 0.45 * k, C.mint, 0.35);
+      fillRR(ctx, -0.42 * k, -0.2 * k, 0.84 * k, 0.16 * k, 0.07 * k, paint('#e8e4fa'));
+      fillRR(ctx, -0.42 * k, -0.07 * k, 0.84 * k, 0.05 * k, 0.025 * k, paint(o.accent, 'trim'));
+      haulLoad(ctx, 0, -0.2 * k, k, o.goods, o.fill, o.accent);
+    } else if (o.planet === 'ice') {
+      // a sled on two runners (tier 3: with a hood against the snow)
+      haulLoad(ctx, 0, -0.36 * k, k, o.goods, o.fill, o.accent);
+      fillRR(ctx, -0.42 * k, -0.36 * k, 0.84 * k, 0.24 * k, 0.06 * k, paint(o.tier === 3 ? '#9fd8ff' : '#d9ecff'));
+      orn(-0.42 * k, -0.36 * k, 0.84 * k, 0.24 * k);
+      line(ctx, -0.5 * k, -0.04 * k, 0.42 * k, -0.04 * k, 0.05 * k, paint(C.metalDark, 'dark'));
+      ctx.strokeStyle = C.metalDark;
+      ctx.lineWidth = 0.05 * k;
+      ctx.beginPath();
+      ctx.arc(0.42 * k, -0.14 * k, 0.1 * k, -Math.PI / 2, Math.PI / 2);
+      ctx.stroke();
+      [-0.25, 0.2].forEach(sx => line(ctx, sx * k, -0.12 * k, sx * k, -0.04 * k, 0.04 * k, C.metalDark));
+      if (o.tier === 3) {
+        ctx.fillStyle = 'rgba(200,236,255,0.55)';
+        ctx.beginPath();
+        ctx.ellipse(-0.05 * k, -0.4 * k, 0.4 * k, 0.26 * k, 0, Math.PI, 0);
+        ctx.fill();
+      }
+      line(ctx, 0.5 * k, -0.2 * k, 0.82 * k, -0.2 * k, 0.04 * k, C.metalDark); // the pull bar (P1: at paw height)
+    } else if (o.planet === 'volcanic') {
+      // a heat-shielded cart of dark metal with a glowing rim
+      haulLoad(ctx, 0, -0.44 * k, k, o.goods, o.fill, o.accent);
+      fillRR(ctx, -0.42 * k, -0.46 * k, 0.84 * k, 0.34 * k, 0.05 * k, paint('#4a3a4a'));
+      orn(-0.42 * k, -0.46 * k, 0.84 * k, 0.34 * k);
+      line(ctx, -0.42 * k, -0.46 * k, 0.42 * k, -0.46 * k, 0.05 * k, '#ff8a3a');
+      glow(ctx, 0, -0.3 * k, 0.35 * k, '#ff8a3a', 0.25);
+      if (o.tier === 3) [-0.28, 0.28].forEach(wx => wheel(wx, 0.1));
+      else {
+        line(ctx, -0.3 * k, -0.2 * k, -0.68 * k, -0.16 * k, 0.045 * k, '#2f2433');
+        wheel(0.27, 0.12);
+      }
+    } else if (o.planet === 'machine') {
+      // a little robot cart: a rounded body, a status light, rolling on its own (the kitten guides it)
+      haulLoad(ctx, 0, -0.44 * k, k, o.goods, o.fill, o.accent);
+      fillRR(ctx, -0.4 * k, -0.46 * k, 0.8 * k, 0.36 * k, 0.12 * k, paint('#c9d2ea'));
+      orn(-0.4 * k, -0.46 * k, 0.8 * k, 0.36 * k);
+      fillRR(ctx, -0.3 * k, -0.38 * k, 0.24 * k, 0.12 * k, 0.04 * k, 'rgba(170,230,255,0.95)');
+      glow(ctx, 0.3 * k, -0.52 * k, 0.07 * k, Math.sin((o.time || 0) * 5 + x) > 0 ? C.mint : C.warm, 1);
+      [-0.22, 0.22].forEach(wx => wheel(wx, 0.09));
+      if (o.tier === 3) wheel(0, 0.09);
+    } else if (o.planet === 'verdant') {
+      // a woven basket on one wheel (tier 3: a leaf wagon)
+      haulLoad(ctx, 0, -0.44 * k, k, o.goods, o.fill, o.accent);
+      fillRR(ctx, -0.4 * k, -0.46 * k, 0.8 * k, 0.32 * k, 0.12 * k, paint(o.tier === 3 ? '#7fd08a' : '#c8a46a'));
+      orn(-0.4 * k, -0.46 * k, 0.8 * k, 0.32 * k);
+      for (let i = 0; i < 4; i++) line(ctx, (-0.3 + i * 0.2) * k, -0.44 * k, (-0.25 + i * 0.2) * k, -0.16 * k, 0.03 * k, o.tier === 3 ? '#4a9a5a' : '#9a7a48');
+      if (o.tier === 3) {
+        [-0.26, 0.26].forEach(wx => wheel(wx, 0.1));
+        poly(ctx, [[0.35 * k, -0.46 * k], [0.62 * k, -0.7 * k], [0.5 * k, -0.42 * k]], '#7fd08a');
+      } else {
+        line(ctx, -0.3 * k, -0.2 * k, -0.68 * k, -0.16 * k, 0.045 * k, '#7a5a38');
+        wheel(0.27, 0.12);
+      }
+    } else if (o.tier === 3) {
+      haulLoad(ctx, 0, -0.42 * k, k, o.goods, o.fill, o.accent);
+      fillRR(ctx, -0.44 * k, -0.44 * k, 0.88 * k, 0.32 * k, 0.07 * k, paint('#8fb4e8'));
+      orn(-0.44 * k, -0.44 * k, 0.88 * k, 0.32 * k);
+      line(ctx, -0.44 * k, -0.44 * k, 0.44 * k, -0.44 * k, 0.04 * k, paint(C.metalDark, 'dark'));
+      line(ctx, 0.44 * k, -0.26 * k, 0.8 * k, -0.2 * k, 0.04 * k, C.metalDark); // the drawbar the kitten pulls
+      [-0.28, 0.28].forEach(wx => wheel(wx, 0.1));
+    } else {
+      haulLoad(ctx, 0.02 * k, -0.42 * k, k, o.goods, o.fill, o.accent);
+      poly(ctx, [[-0.36 * k, -0.44 * k], [0.36 * k, -0.44 * k], [0.25 * k, -0.13 * k], [-0.26 * k, -0.13 * k]], paint(C.wood));
+      orn(-0.26 * k, -0.42 * k, 0.52 * k, 0.28 * k);
+      line(ctx, -0.36 * k, -0.44 * k, 0.36 * k, -0.44 * k, 0.045 * k, paint(C.woodDark, 'dark'));
+      line(ctx, -0.26 * k, -0.18 * k, -0.66 * k, -0.16 * k, 0.045 * k, C.woodDark);
+      line(ctx, -0.1 * k, -0.13 * k, -0.17 * k, 0, 0.045 * k, C.woodDark);
+      wheel(0.27, 0.12);
+    }
+    ctx.restore();
+  }
+
+  // ----- P1.5 Cosmetics 2.1: the vehicle paint, the depot roofs, the planet decorations -----
+  // A vehicle look paints the vehicles the economy already moves (no extra vehicle is drawn): the body, its dark rim,
+  // the cab and an ornament. Each world keeps its own carrier shape (sled, heat cart, robot cart, basket). The ornament
+  // follows the real state: the ember seams glow only while the vehicle carries a load, the brass cog turns only
+  // while it drives.
+  const VEHICLE_SKINS = {
+    'vehicle-mint': { body: '#8fe8c8', dark: '#3f9c80', trim: '#fff4e2', cab: '#c8fff0', ornament: 'stripe' },
+    'vehicle-ember': { body: '#3a2a36', dark: '#1f161d', trim: '#ff8a3a', cab: '#5a3a44', ornament: 'seams', glow: '#ffb35a' },
+    'vehicle-brass': { body: '#e0b25a', dark: '#8a5a1a', trim: '#7a4a1a', cab: '#f0cf8a', ornament: 'rivets' }
+  };
+  const vehicleSkin = id => VEHICLE_SKINS[id] || null;
+  // the ornament on a body box (local coordinates of the vehicle): o.loaded / o.moving are the vehicle's real state
+  function vehicleOrnament(ctx, skin, x0, y0, w, h, k, t, o = {}) {
+    if (!skin) return;
+    if (skin.ornament === 'stripe') {
+      fillRR(ctx, x0, y0 + h * 0.42, w, h * 0.2, Math.min(h * 0.1, 0.04 * k), skin.trim);
+    } else if (skin.ornament === 'seams') {
+      // two cracks of glowing heat; dark when the vehicle runs empty
+      const on = o.loaded ? 0.75 + (o.reduced ? 0 : Math.sin(t * 3 + x0) * 0.2) : 0.18;
+      ctx.save();
+      ctx.globalAlpha = on;
+      ctx.strokeStyle = skin.trim;
+      ctx.lineWidth = Math.max(1, 0.035 * k);
+      ctx.lineJoin = 'round';
+      for (const [fx, dir] of [[0.28, 1], [0.7, -1]]) {
+        ctx.beginPath();
+        ctx.moveTo(x0 + w * fx, y0 + h * 0.12);
+        ctx.lineTo(x0 + w * fx + dir * w * 0.06, y0 + h * 0.45);
+        ctx.lineTo(x0 + w * fx - dir * w * 0.03, y0 + h * 0.62);
+        ctx.lineTo(x0 + w * fx + dir * w * 0.05, y0 + h * 0.9);
+        ctx.stroke();
+      }
+      ctx.restore();
+      if (o.loaded) glow(ctx, x0 + w / 2, y0 + h / 2, Math.max(w, h) * 0.6, skin.glow, 0.22 * on);
+    } else if (skin.ornament === 'rivets') {
+      ctx.fillStyle = skin.trim;
+      const n = Math.max(3, Math.round(w / (0.16 * k)));
+      for (let i = 0; i < n; i++) {
+        ctx.beginPath();
+        ctx.arc(x0 + ((i + 0.5) * w) / n, y0 + h * 0.2, Math.max(0.6, 0.025 * k), 0, TAU);
+        ctx.fill();
+      }
+      // the little cog on the side turns only while the vehicle drives
+      const a = o.moving && !o.reduced ? t * 3 : 0.3,
+        cx = x0 + w * 0.5,
+        cy = y0 + h * 0.62,
+        r = Math.min(h * 0.32, 0.11 * k);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(a);
+      ctx.fillStyle = skin.trim;
+      ctx.beginPath();
+      for (let i = 0; i < 12; i++) {
+        const ang = (i / 12) * TAU,
+          d = i % 2 ? r * 0.7 : r;
+        i ? ctx.lineTo(Math.cos(ang) * d, Math.sin(ang) * d) : ctx.moveTo(d, 0);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = skin.cab;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.32, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  // The depot's roof (the second building slot): the look replaces the roof's surface on every planet – Orion's
+  // pitched roof, Glacies' snow dome, Pyra's basalt vault, Viridia's root cap – and adds its crown. The brass vent turns
+  // only while goods roll into the depot (o.active); the blossoms sway in the wind (still with reduced motion).
+  const DEPOT_SKINS = {
+    'depot-brass': { roof: ['#f6cf7a', '#b8862e'], trim: '#7a4a1a', pattern: 'seams', apex: 'gear' },
+    'depot-blossom': { roof: ['#ffd3e6', '#ff8fbd'], trim: '#fff0f6', pattern: 'shingles', apex: 'flower' }
+  };
+  // path(ctx) builds the roof's outline; box = its bounds; apex = where the crown sits
+  function roofLook(ctx, id, path, box, apex, k, t, o = {}) {
+    const skin = DEPOT_SKINS[id];
+    if (!skin) return false;
+    const g = ctx.createLinearGradient(0, box.y0, 0, box.y1);
+    g.addColorStop(0, skin.roof[0]);
+    g.addColorStop(1, skin.roof[1]);
+    ctx.save();
+    ctx.beginPath();
+    path(ctx);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.clip();
+    if (skin.pattern === 'seams') {
+      // brass plates: seams across, a row of rivets on each
+      for (let y = box.y0 + 0.22 * k; y < box.y1; y += 0.24 * k) {
+        line(ctx, box.x0, y, box.x1, y, 0.025 * k, 'rgba(122,74,26,0.55)');
+        ctx.fillStyle = 'rgba(255,240,200,0.8)';
+        for (let x = box.x0 + 0.12 * k; x < box.x1; x += 0.3 * k) {
+          ctx.beginPath();
+          ctx.arc(x, y - 0.06 * k, 0.025 * k, 0, TAU);
+          ctx.fill();
+        }
+      }
+    } else {
+      // petal shingles: rows of scallops, every other row shifted
+      let row = 0;
+      for (let y = box.y0 + 0.12 * k; y < box.y1 + 0.2 * k; y += 0.18 * k, row++)
+        for (let x = box.x0 - (row % 2) * 0.12 * k; x < box.x1 + 0.2 * k; x += 0.24 * k) {
+          ctx.fillStyle = (row + Math.round(x / k)) % 3 ? 'rgba(255,255,255,0.32)' : 'rgba(255,111,168,0.35)';
+          ctx.beginPath();
+          ctx.ellipse(x, y, 0.13 * k, 0.1 * k, 0, 0, Math.PI);
+          ctx.fill();
+        }
+    }
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath();
+    path(ctx);
+    ctx.strokeStyle = skin.trim;
+    ctx.lineWidth = 0.05 * k;
+    ctx.stroke();
+    ctx.restore();
+    if (skin.apex === 'gear') {
+      // the vent: a cog on a short stack, turning while goods come in
+      fillRR(ctx, apex.x - 0.08 * k, apex.y - 0.3 * k, 0.16 * k, 0.3 * k, 0.04 * k, skin.trim);
+      ctx.save();
+      ctx.translate(apex.x, apex.y - 0.38 * k);
+      ctx.rotate(o.active && !o.reduced ? t * 2.4 : 0);
+      ctx.fillStyle = skin.roof[0];
+      ctx.beginPath();
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * TAU,
+          d = (i % 2 ? 0.15 : 0.21) * k;
+        i ? ctx.lineTo(Math.cos(a) * d, Math.sin(a) * d) : ctx.moveTo(d, 0);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = skin.trim;
+      ctx.lineWidth = 0.025 * k;
+      ctx.stroke();
+      for (let i = 0; i < 4; i++) line(ctx, 0, 0, Math.cos((i / 4) * TAU) * 0.12 * k, Math.sin((i / 4) * TAU) * 0.12 * k, 0.025 * k, skin.trim);
+      ctx.restore();
+    } else {
+      // a flower on the ridge with two leaves that sway
+      const sway = o.reduced ? 0 : Math.sin(t * 1.6) * 0.12;
+      ctx.save();
+      ctx.translate(apex.x, apex.y);
+      ctx.rotate(sway);
+      for (const side of [-1, 1]) {
+        ctx.fillStyle = '#7fd08a';
+        ctx.beginPath();
+        ctx.ellipse(side * 0.16 * k, -0.08 * k, 0.16 * k, 0.06 * k, side * 0.5, 0, TAU);
+        ctx.fill();
+      }
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * TAU - Math.PI / 2;
+        ctx.fillStyle = i % 2 ? '#ffb8da' : '#ff8fbd';
+        ctx.beginPath();
+        ctx.ellipse(Math.cos(a) * 0.1 * k, -0.22 * k + Math.sin(a) * 0.1 * k, 0.09 * k, 0.06 * k, a, 0, TAU);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#ffe26b';
+      ctx.beginPath();
+      ctx.arc(0, -0.22 * k, 0.05 * k, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+    return true;
+  }
+  // A stall look's real roof on a planet stall: the stripes of the awning across the planet's own roof shape, its trim
+  // along the edge (path builds the roof outline, box its bounds).
+  function stallRoof(ctx, id, path, box, k) {
+    const skin = STALL_SKINS[id];
+    if (!skin) return null;
+    ctx.save();
+    ctx.beginPath();
+    path(ctx);
+    ctx.fillStyle = skin.awning[1];
+    ctx.fill();
+    ctx.clip();
+    const n = 7,
+      w = (box.x1 - box.x0) / n;
+    ctx.fillStyle = skin.awning[0];
+    for (let i = 0; i < n; i += 2) ctx.fillRect(box.x0 + i * w, box.y0 - k, w, box.y1 - box.y0 + 2 * k);
+    // a soft shade under the edge
+    const g = ctx.createLinearGradient(0, box.y0, 0, box.y1);
+    g.addColorStop(0, 'rgba(255,255,255,0.18)');
+    g.addColorStop(1, 'rgba(40,30,70,0.18)');
+    ctx.fillStyle = g;
+    ctx.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath();
+    path(ctx);
+    ctx.strokeStyle = skin.roof;
+    ctx.lineWidth = 0.06 * k;
+    ctx.stroke();
+    ctx.restore();
+    return skin;
+  }
+
+  // Planet decorations (slot 'decor', one per world): standing in front of the colony's home. They react to the world:
+  // the cat fountain freezes on Glacies while the colony is not heated (it thaws and steams once it is), steams on Pyra,
+  // has moss on Viridia; the flower arch opens its blossoms once the planet is freed. o: { planet, time, reduced, warm,
+  // freed }. Returns the tap box.
+  function decor(ctx, id, x, y, k, o = {}) {
+    const t = o.time || 0,
+      reduced = o.reduced;
+    shadow(ctx, x, y, 1.9 * k, k);
+    if (id === 'decor-fountain') {
+      const frozen = o.planet === 'ice' && o.warm === false,
+        stone = o.planet === 'volcanic' ? '#6a5a72' : o.planet === 'ice' ? '#d9ecf7' : o.planet === 'machine' ? '#b9c2dc' : '#d9d3f5',
+        stoneDark = o.planet === 'volcanic' ? '#4a3a52' : o.planet === 'ice' ? '#9fc4dc' : o.planet === 'machine' ? '#8a94b8' : '#a9a0d8',
+        water = frozen ? '#e8fbff' : o.planet === 'volcanic' ? '#8fe3ff' : '#7fd4ff';
+      // basin
+      fillRR(ctx, x - 0.85 * k, y - 0.42 * k, 1.7 * k, 0.42 * k, 0.16 * k, stone);
+      ctx.fillStyle = stoneDark;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 0.42 * k, 0.85 * k, 0.16 * k, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = water;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 0.42 * k, 0.72 * k, 0.11 * k, 0, 0, TAU);
+      ctx.fill();
+      if (o.planet === 'verdant')
+        for (let i = 0; i < 4; i++) fillRR(ctx, x - 0.8 * k + i * 0.48 * k, y - 0.2 * k, 0.26 * k, 0.1 * k, 0.05 * k, '#7fd08a');
+      if (o.planet === 'machine') line(ctx, x - 0.85 * k, y - 0.24 * k, x + 0.85 * k, y - 0.24 * k, 0.05 * k, '#e0b25a');
+      // pedestal and the sitting cat statue (stone, the tail curled round its paws)
+      fillRR(ctx, x - 0.16 * k, y - 0.9 * k, 0.32 * k, 0.5 * k, 0.06 * k, stoneDark);
+      const cx = x,
+        cy = y - 0.92 * k;
+      ctx.fillStyle = stone;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - 0.28 * k, 0.24 * k, 0.3 * k, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + 0.04 * k, cy - 0.68 * k, 0.2 * k, 0, TAU);
+      ctx.fill();
+      poly(ctx, [[cx - 0.12 * k, cy - 0.8 * k], [cx - 0.08 * k, cy - 1.0 * k], [cx + 0.02 * k, cy - 0.84 * k]], stone);
+      poly(ctx, [[cx + 0.06 * k, cy - 0.84 * k], [cx + 0.17 * k, cy - 0.99 * k], [cx + 0.2 * k, cy - 0.78 * k]], stone);
+      ctx.strokeStyle = stone;
+      ctx.lineWidth = 0.07 * k;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - 0.2 * k, cy - 0.1 * k);
+      ctx.quadraticCurveTo(cx - 0.42 * k, cy - 0.05 * k, cx - 0.3 * k, cy + 0.04 * k);
+      ctx.stroke();
+      ctx.fillStyle = stoneDark;
+      ctx.beginPath();
+      ctx.arc(cx + 0.1 * k, cy - 0.7 * k, 0.025 * k, 0, TAU);
+      ctx.arc(cx - 0.02 * k, cy - 0.7 * k, 0.025 * k, 0, TAU);
+      ctx.fill();
+      if (o.planet === 'machine') line(ctx, cx - 0.14 * k, cy - 0.5 * k, cx + 0.2 * k, cy - 0.5 * k, 0.04 * k, '#e0b25a'); // a brass collar
+      if (o.planet === 'verdant') glow(ctx, cx - 0.1 * k, cy - 0.92 * k, 0.1 * k, '#ff9ecb', 0.9); // a flower behind the ear
+      // the water: an arc from the mouth into the basin (droplets run along it); frozen = a still ice arc that glints
+      const mx = cx + 0.22 * k,
+        my = cy - 0.62 * k,
+        ex = x + 0.62 * k,
+        ey = y - 0.44 * k,
+        at = u => ({ x: mx + (ex - mx) * u, y: my + (ey - my) * u * u - Math.sin(u * Math.PI) * 0.18 * k });
+      ctx.strokeStyle = frozen ? 'rgba(232,251,255,0.95)' : 'rgba(127,212,255,0.7)';
+      ctx.lineWidth = (frozen ? 0.07 : 0.05) * k;
+      ctx.beginPath();
+      for (let i = 0; i <= 10; i++) {
+        const p = at(i / 10);
+        i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+      }
+      ctx.stroke();
+      if (frozen) {
+        const g = at(reduced ? 0.5 : (t * 0.4) % 1);
+        glow(ctx, g.x, g.y, 0.12 * k, '#ffffff', 0.9);
+        for (let i = 0; i < 3; i++) poly(ctx, [[x - 0.4 * k + i * 0.35 * k, y - 0.42 * k], [x - 0.36 * k + i * 0.35 * k, y - 0.25 * k], [x - 0.32 * k + i * 0.35 * k, y - 0.42 * k]], '#e8fbff');
+      } else {
+        for (let i = 0; i < 3; i++) {
+          const p = at(reduced ? (i + 0.5) / 3 : (t * 0.9 + i / 3) % 1);
+          glow(ctx, p.x, p.y, 0.06 * k, '#e8fbff', 0.95);
+        }
+        // ripples where it lands
+        const r = reduced ? 0.5 : (t * 0.8) % 1;
+        ctx.strokeStyle = 'rgba(232,251,255,' + (0.7 * (1 - r)).toFixed(3) + ')';
+        ctx.lineWidth = 0.025 * k;
+        ctx.beginPath();
+        ctx.ellipse(ex, ey + 0.02 * k, 0.1 * k + r * 0.25 * k, 0.03 * k + r * 0.05 * k, 0, 0, TAU);
+        ctx.stroke();
+        // warm water steams (Pyra always, Glacies once heated)
+        if ((o.planet === 'volcanic' || o.planet === 'ice') && !reduced)
+          for (let i = 0; i < 2; i++) {
+            const q = (t * 0.35 + i * 0.5) % 1;
+            glow(ctx, x - 0.25 * k + i * 0.5 * k, y - 0.55 * k - q * 0.7 * k, (0.12 + q * 0.2) * k, '#ffffff', 0.28 * (1 - q));
+          }
+      }
+      return { x0: x - 0.95 * k, y0: y - 2.05 * k, x1: x + 0.95 * k, y1: y + 0.1 * k };
+    }
+    if (id === 'decor-bloomarch') {
+      // two posts, an arch of vine; seven blossoms, open once the planet is freed (closed buds before)
+      const open = o.freed ? 1 : 0.35,
+        sway = reduced ? 0 : Math.sin(t * 1.3) * 0.04 * k;
+      for (const side of [-1, 1]) fillRR(ctx, x + side * 0.85 * k - 0.07 * k, y - 1.6 * k, 0.14 * k, 1.6 * k, 0.05 * k, '#8a6a48');
+      ctx.strokeStyle = '#4a9a5a';
+      ctx.lineWidth = 0.1 * k;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.85 * k, y - 1.55 * k);
+      ctx.quadraticCurveTo(x + sway, y - 2.5 * k, x + 0.85 * k, y - 1.55 * k);
+      ctx.stroke();
+      for (let i = 0; i < 7; i++) {
+        const u = i / 6,
+          bx = (1 - u) * (1 - u) * (x - 0.85 * k) + 2 * u * (1 - u) * (x + sway) + u * u * (x + 0.85 * k),
+          by = (1 - u) * (1 - u) * (y - 1.55 * k) + 2 * u * (1 - u) * (y - 2.5 * k) + u * u * (y - 1.55 * k),
+          r = (0.08 + 0.08 * open) * k;
+        if (!o.freed) {
+          // a closed bud: a green calyx and a pink tip, nodding in the wind
+          ctx.save();
+          ctx.translate(bx, by);
+          ctx.rotate(reduced ? 0 : Math.sin(t * 1.5 + i) * 0.15);
+          ctx.fillStyle = i % 2 ? '#ff8fbd' : '#ffb8da';
+          ctx.beginPath();
+          ctx.ellipse(0, -0.07 * k, 0.06 * k, 0.1 * k, 0, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = '#4a9a5a';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 0.07 * k, 0.05 * k, 0, 0, Math.PI);
+          ctx.fill();
+          ctx.restore();
+          continue;
+        }
+        for (let p = 0; p < 5; p++) {
+          const a = (p / 5) * TAU + i + (reduced ? 0 : Math.sin(t + i) * 0.1);
+          ctx.fillStyle = i % 2 ? '#ff8fbd' : '#ffb8da';
+          ctx.beginPath();
+          ctx.ellipse(bx + Math.cos(a) * r * 0.8, by + Math.sin(a) * r * 0.8, r * 0.7, r * 0.45, a, 0, TAU);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#ffe26b';
+        ctx.beginPath();
+        ctx.arc(bx, by, r * 0.35, 0, TAU);
+        ctx.fill();
+      }
+      if (o.freed) glow(ctx, x, y - 2.1 * k, 0.9 * k, '#ff9ecb', reduced ? 0.18 : 0.14 + Math.sin(t * 1.4) * 0.05);
+      return { x0: x - 1.05 * k, y0: y - 2.7 * k, x1: x + 1.05 * k, y1: y + 0.1 * k };
+    }
+    return null;
+  }
   window.ColonyArt = {
     C,
+    VEHICLE_SKINS,
+    DEPOT_SKINS,
+    vehicleSkin,
+    vehicleOrnament,
+    roofLook,
+    stallRoof,
+    decor,
     glow,
+    haulLoad,
+    haulCarrier,
+    planetAnnex,
     hazard,
     gear,
     shadow,
@@ -1268,6 +2205,9 @@
     crystal,
     plaque,
     setLabelGate,
+    crowdBadge,
+    beginLabels,
+    endLabels,
     scaffold,
     emptyPlot,
     pole,
@@ -1293,6 +2233,8 @@
     cavern,
     cliff,
     aurora,
-    prop
+    prop,
+    stallAccent,
+    STALL_SKINS
   };
 })();

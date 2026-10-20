@@ -84,6 +84,32 @@ renderObjective = function () {
   card.dataset.sheet = '';
 };
 
+// Beta 1.9 M4: a tap on the first-credits card answered nothing (measured by tools/b19-ftue-probe.mjs: 3–5 taps in the
+// first 30 minutes). It now shows where to tap: the camera glides to the station and the named dock step hops once.
+const MOBILE_UX_STEP_BUTTON = { mine: 'collectButton', rail: 'cartButton', stall: 'sellButton' };
+document.addEventListener('click', event => {
+  const step = document.body.dataset.nextStep;
+  if (!step || !event.target.closest('#objectiveCard')) return;
+  const button = $(MOBILE_UX_STEP_BUTTON[step]);
+  if (!button) return;
+  window.NebulaScenesRuntime?.mounted?.colony?.scene?.focusStation?.(step);
+  button.classList.remove('step-nudge');
+  void button.offsetWidth;
+  button.classList.add('step-nudge');
+  setTimeout(() => button.classList.remove('step-nudge'), 750);
+  if (typeof feedback === 'function') feedback('open');
+});
+
+// Beta 1.9 M4: ABBAUEN on a full Halde only answers with a toast (10–15 such taps in 30 minutes, b19-ftue-probe). The
+// button says it before the tap ("Halde voll") and the LORE pulses, the step that makes room.
+const renderBeforePileHint = render;
+render = () => {
+  renderBeforePileHint();
+  const full = !undergroundOpen() && colonyAt().stock.pile >= pileCapacity() - 0.5;
+  $('collectButton')?.classList.toggle('pile-full', full);
+  $('cartButton')?.classList.toggle('pile-full-next', full && !isAutomated('rail'));
+};
+
 // ----- N-03: say where a planet discovery took the player, and offer the way back -----
 // Finishing a scan switches the viewed planet to the new colony (game.js, unchanged). The banner now names the old
 // colony and a non-blocking "Zurück" chip appears for a while — no confirmation, no extra step for repeat players.
@@ -161,7 +187,17 @@ const SCENE_ZOOM_KEY = 'nebula-harvest-colony-zoom';
   bar.className = 'scene-bar';
   bar.id = 'sceneBar';
   nav.before(bar);
-  bar.append(nav);
+  // P1.2: where the full row of district jumps does not fit beside the tools (every phone, a tablet), one picker shows
+  // the district in view and opens the jumps as a short list above the bar (before, the row shrank to a 77-px strip
+  // that scrolled sideways and cut its own buttons)
+  const pick = document.createElement('button');
+  pick.className = 'district-pick';
+  pick.id = 'districtPick';
+  pick.type = 'button';
+  pick.setAttribute('aria-haspopup', 'true');
+  pick.setAttribute('aria-expanded', 'false');
+  pick.setAttribute('aria-controls', 'districtNav');
+  bar.append(pick, nav);
   const tools = document.createElement('div');
   tools.className = 'scene-tools';
   tools.innerHTML = '<button class="scene-zoom" id="sceneZoom" aria-pressed="false" aria-label="Übersicht der Kolonie">🔭<b> Übersicht</b></button>';
@@ -212,21 +248,70 @@ function renderDistrictNav(force = false) {
   const list = scene?.districts ? scene.districts() : [],
     mine = $('heroCard')?.classList.contains('mine-view'),
     show = currentScreen() === 'home' && list.length > 0 && !mine,
-    sig = show + ':' + state.activePlanet + ':' + list.map(d => d.id + (d.active ? '*' : '')).join(',');
+    sig = show + ':' + state.activePlanet + ':' + list.map(d => d.id + ':' + d.name + (d.active ? '*' : '')).join(','); // P1.2: names too (worlds share district ids)
   if (!force && sig === districtNavSig) return;
   districtNavSig = sig;
   nav.hidden = !show;
+  const pick = $('districtPick');
+  if (pick) pick.hidden = !show;
   // the scene tools follow the colony card (hidden in the mine and off the colony screen)
   const bar = $('sceneBar');
   if (bar) {
     bar.classList.toggle('mine-view', Boolean(mine));
     bar.hidden = currentScreen() !== 'home' || !$('heroCard')?.classList.contains('has-scene');
   }
-  if (!show) return;
+  if (!show) return setDistrictMenu(false);
   nav.innerHTML = list
     .map(d => `<button data-district="${d.id}" class="${d.active ? 'active' : ''}" ${d.active ? 'aria-current="true"' : ''} aria-label="${d.name}"><span aria-hidden="true">${d.icon}</span><b>${d.name}</b></button>`)
     .join('');
+  const here = list.find(d => d.active) || list[0];
+  if (pick) {
+    pick.innerHTML = `<span aria-hidden="true">${here.icon}</span><b>${here.name}</b><i aria-hidden="true">▾</i>`;
+    pick.setAttribute('aria-label', 'Bezirk wählen, jetzt: ' + here.name);
+  }
+  fitSceneBar();
 }
+// the full row when it fits beside the tools, else the picker (measured, not guessed by width: labels, tools and the
+// rail differ per screen); re-measured on every new district list and on resize
+function fitSceneBar() {
+  const bar = $('sceneBar'),
+    nav = $('districtNav');
+  if (!bar || !nav || nav.hidden || bar.hidden) return;
+  // not laid out yet (the shell's classes follow later in the same render, e.g. coming back from the mine): measure on
+  // the next render instead of judging an empty box
+  if (!bar.clientWidth) {
+    districtNavSig = '';
+    return;
+  }
+  const was = bar.classList.contains('compact');
+  bar.classList.remove('compact');
+  // the row shrinks before it overflows (flex, min-width 0): it does not fit when its buttons are wider than its box
+  const compact = !nav.clientWidth || nav.scrollWidth > nav.clientWidth + 1;
+  bar.classList.toggle('compact', compact);
+  if (!compact && was) setDistrictMenu(false);
+}
+let districtMenuOpen = false;
+function setDistrictMenu(open) {
+  districtMenuOpen = Boolean(open) && Boolean($('sceneBar')?.classList.contains('compact'));
+  $('sceneBar')?.classList.toggle('menu-open', districtMenuOpen);
+  $('districtPick')?.setAttribute('aria-expanded', String(districtMenuOpen));
+}
+window.addEventListener('resize', () => {
+  districtNavSig = '';
+  requestAnimationFrame(() => renderDistrictNav(true));
+});
+document.addEventListener('click', event => {
+  if (event.target.closest('#districtPick')) {
+    setDistrictMenu(!districtMenuOpen);
+    feedback('open');
+    return;
+  }
+  // a tap anywhere else closes the list (a district button closes it after its jump below)
+  if (districtMenuOpen && !event.target.closest('#districtNav')) setDistrictMenu(false);
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && districtMenuOpen) setDistrictMenu(false);
+});
 const renderBeforeDistrictNav = render;
 render = () => {
   renderBeforeDistrictNav();
@@ -237,5 +322,6 @@ document.addEventListener('click', event => {
   if (!b) return;
   colonySceneHandle()?.focusDistrict?.(b.dataset.district);
   feedback('open');
+  setDistrictMenu(false);
   renderDistrictNav(true);
 });

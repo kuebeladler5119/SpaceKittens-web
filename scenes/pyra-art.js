@@ -266,6 +266,24 @@
     ctx.moveTo(x - 1.6 * k, y - 1.3 * k);
     ctx.quadraticCurveTo(x, y - 2.3 * k, x + 1.6 * k, y - 1.3 * k);
     ctx.stroke();
+    // P1.5: the depot look as the vault's roof (a band over the curve)
+    if (o.skin)
+      A().roofLook?.(
+        ctx,
+        o.skin,
+        c => {
+          c.moveTo(x - 1.68 * k, y - 1.22 * k);
+          c.quadraticCurveTo(x, y - 2.42 * k, x + 1.68 * k, y - 1.22 * k);
+          c.lineTo(x + 1.5 * k, y - 1.12 * k);
+          c.quadraticCurveTo(x, y - 1.95 * k, x - 1.5 * k, y - 1.12 * k);
+          c.closePath();
+        },
+        { x0: x - 1.68 * k, y0: y - 1.85 * k, x1: x + 1.68 * k, y1: y - 1.12 * k },
+        { x: x + 0.5 * k, y: y - 1.74 * k },
+        k,
+        t,
+        o
+      );
     fillRR(ctx, x - 0.55 * k, y - 1.05 * k, 1.1 * k, 1.05 * k, 0.12 * k, '#2a2234');
     fillRR(ctx, x - 0.48 * k, y - 0.98 * k, 0.96 * k, 0.12 * k, 0.04 * k, o.calm ? P.cyan : P.ember);
     A().hazard(ctx, x - 0.5 * k, y - 0.2 * k, 1.0 * k, 0.1 * k);
@@ -291,19 +309,23 @@
     for (let i = 0; i < 1 + Math.round(fill * 4); i++) crystal(ctx, x - 0.85 * k + i * 0.3 * k, y - 0.5 * k, 0.12 * k, i % 2 ? '#ffb03a' : '#ff8a72', 0);
     fillRR(ctx, x + 0.55 * k, y - 0.85 * k, 0.5 * k, 0.6 * k, 0.08 * k, '#3a5a7a');
     fillRR(ctx, x + 0.6 * k, y - 0.8 * k, 0.4 * k, 0.12 * k, 0.04 * k, P.cyan);
-    // copper canopy
+    // copper canopy (P1.5: a stall look is the canopy's own awning – its stripes, its trim, its lamps)
+    const canopy = c => {
+      c.moveTo(x - 1.6 * k, y - 1.05 * k);
+      c.lineTo(x - 1.2 * k, y - 1.7 * k);
+      c.lineTo(x + 1.2 * k, y - 1.7 * k);
+      c.lineTo(x + 1.6 * k, y - 1.05 * k);
+      c.closePath();
+    };
     ctx.fillStyle = '#c87a4a';
     ctx.beginPath();
-    ctx.moveTo(x - 1.6 * k, y - 1.05 * k);
-    ctx.lineTo(x - 1.2 * k, y - 1.7 * k);
-    ctx.lineTo(x + 1.2 * k, y - 1.7 * k);
-    ctx.lineTo(x + 1.6 * k, y - 1.05 * k);
-    ctx.closePath();
+    canopy(ctx);
     ctx.fill();
-    line(ctx, x - 1.6 * k, y - 1.05 * k, x + 1.6 * k, y - 1.05 * k, 0.06 * k, '#ffd25a');
+    const look = o.skin ? A().stallRoof?.(ctx, o.skin, canopy, { x0: x - 1.6 * k, y0: y - 1.7 * k, x1: x + 1.6 * k, y1: y - 1.05 * k }, k) : null;
+    line(ctx, x - 1.6 * k, y - 1.05 * k, x + 1.6 * k, y - 1.05 * k, 0.06 * k, look ? look.roof : '#ffd25a');
     for (let i = 0; i < (level >= 10 ? 3 : 2); i++) {
       const lx = x - 1.0 * k + (i * 2.0 * k) / (level >= 10 ? 2 : 1);
-      glow(ctx, lx, y - 0.95 * k, 0.15 * k, '#ffb03a', 0.8 + Math.sin(t * 2 + i) * 0.1);
+      glow(ctx, lx, y - 0.95 * k, 0.15 * k, look ? look.lights[i % 3] : '#ffb03a', 0.8 + Math.sin(t * 2 + i) * 0.1);
     }
     if (o.saleGlow > 0) glow(ctx, x, y - 0.9 * k, 1 * k, '#ffd25a', o.saleGlow * 0.6);
     plaque(ctx, x, y + 0.18 * k, k, 'Glutmarkt Lv ' + level, P.coral);

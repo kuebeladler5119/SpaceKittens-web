@@ -13,7 +13,29 @@ const CORES = {
       { id: 'seal', name: 'Risse versiegeln', needs: { crystalGel: 40, plating: 30, raw: 500000 }, reward: 'Alle Orion-Schächte fördern 10 % mehr.' },
       { id: 'tune', name: 'Resonanz stimmen', needs: { polymer: 12, crystals: 400, hullModule: 4 }, reward: 'Neues Fertigungsrezept: Kernkristall (100 Barren + 1 Sternenpolymer).' },
       { id: 'wake', name: 'Kern erwecken', needs: { coreCrystal: 5, credits: 50000000 }, reward: 'Orion verwandelt sich: Polarlicht über der Kolonie, alle Verkäufe auf Orion +25 %.' }
-    ]
+    ],
+    depth: 'Tiefe 15',
+    intro: 'Der beschädigte Kern des Kristallplaneten. Seit der Großen Stille ist er gesprungen – heile ihn in drei Stufen.',
+    healed: 'Der Kern ist geheilt. Orion leuchtet – alle Verkäufe auf Orion bringen 25 % mehr.',
+    saleFactor: 1.25
+  },
+  // Beta 1.9 M7: Glacies' Thermalkern in the Altes Wärmenetz below the frost layer. Found once Frostbyte is
+  // recalibrated (the story of Glacies) and the Kernscanner is researched, with Glacies' mine open. Its stages use the
+  // Glacies chain (M5): Thermalzellen, Kühlmittel, Frostquarz → Kälteplatten, Kryokerne, bars → Kryokerne and the
+  // Hitzeschild from Pyra. The rewards act on Glacies' own chain; the last one transforms the world (hot springs).
+  ice: {
+    planet: 1,
+    name: 'Thermalkern',
+    found: () => (typeof techHas === 'function' && techHas('coreScanner')) && state.meta?.guardians?.frostbyte?.stage === 'repaired' && typeof undergroundOpen === 'function' && undergroundOpen(1),
+    stages: [
+      { id: 'thaw', name: 'Wärmenetz auftauen', needs: { cells: 30, coolant: 20, frost: 600 }, reward: 'Warme Geysire: der Frostquarz-Bohrer fördert 50 % mehr.' },
+      { id: 'network', name: 'Wärmenetz schließen', needs: { coldPlate: 10, cryoCore: 3, bars: 1500 }, reward: 'Die Thermalwerkstatt arbeitet 50 % schneller.' },
+      { id: 'wake', name: 'Thermalkern erwecken', needs: { cryoCore: 6, heatShield: 1, credits: 25000000 }, reward: 'Glacies verwandelt sich: heiße Quellen dampfen in der Kolonie, alle Verkäufe auf Glacies +20 %.' }
+    ],
+    depth: 'Altes Wärmenetz',
+    intro: 'Unter der Frostschicht schläft das alte Wärmenetz der Kolonisten. Sein Kern ist erkaltet – taue es in drei Stufen wieder auf.',
+    healed: 'Der Thermalkern glüht. Heiße Quellen wärmen Glacies – alle Verkäufe auf Glacies bringen 20 % mehr.',
+    saleFactor: 1.2
   }
 };
 function normalizeCore(raw) {
@@ -41,6 +63,7 @@ function corePhase(key = 'crystal') {
   const def = CORES[key],
     s = coreState(key);
   if (s.stage >= def.stages.length) return 'healed';
+  if (def.found) return def.found() ? (s.stage > 0 ? 'healing' : 'found') : 'hidden';
   if (!(typeof techHas === 'function' && techHas('coreScanner')) || !shaftBuilt(def.below, def.planet)) return 'hidden';
   return s.stage > 0 ? 'healing' : 'found';
 }
@@ -109,5 +132,17 @@ function coreShaftFactor(planet) {
   return planet === CORES.crystal.planet && coreStage('crystal') >= 1 ? 1.1 : 1;
 }
 function coreSaleFactor(planet) {
-  return planet === CORES.crystal.planet && coreStage('crystal') >= 3 ? 1.25 : 1;
+  for (const [key, def] of Object.entries(CORES)) if (planet === def.planet && coreStage(key) >= def.stages.length) return def.saleFactor || 1;
+  return 1;
+}
+// Beta 1.9 M7: Glacies' Thermalkern – warm geysers (stage 1) and the closed heat network (stage 2)
+function coreFrostFactor(planet) {
+  return planet === CORES.ice.planet && coreStage('ice') >= 1 ? 1.5 : 1;
+}
+function coreThermalFactor(planet) {
+  return planet === CORES.ice.planet && coreStage('ice') >= 2 ? 1.5 : 1;
+}
+// the core of a planet (its key), if it has one
+function coreKeyOf(planet) {
+  return Object.keys(CORES).find(key => CORES[key].planet === planet) || null;
 }

@@ -31,14 +31,21 @@ function normalizeArtifacts(raw) {
         .map(a => ({ id: Math.max(1, Math.floor(Number(a.id) || 0)), type: a.type, depth: Math.max(3, Math.floor(Number(a.depth) || 3)), fav: Boolean(a.fav) }))
     : [];
   const num = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
-  return { items, progress: num(raw?.progress), found: Math.floor(num(raw?.found)), seq: Math.floor(num(raw?.seq)), sold: Math.floor(num(raw?.sold)), analysed: Math.floor(num(raw?.analysed)) };
+  // Beta 1.9 M6: seen (every type ever found, the collection) and used (finds consumed by recipes and research)
+  const seen = {};
+  if (raw?.seen && typeof raw.seen === 'object') for (const t of Object.keys(raw.seen)) if (ARTIFACTS[t] && raw.seen[t]) seen[t] = true;
+  for (const a of items) seen[a.type] = true;
+  return { items, progress: num(raw?.progress), found: Math.floor(num(raw?.found)), seq: Math.floor(num(raw?.seq)), sold: Math.floor(num(raw?.sold)), analysed: Math.floor(num(raw?.analysed)), seen, used: Math.floor(num(raw?.used)) };
 }
 function artifactState() {
   if (!state.meta.artifacts) state.meta.artifacts = normalizeArtifacts(null);
   return state.meta.artifacts;
 }
 function artifactThreshold(found = artifactState().found) {
-  return ARTIFACT_STEP * (1 + 0.25 * found);
+  // Beta 1.9 M6: the research Fossilkunde (−20 %) and the complete collection (−10 %) bring finds sooner
+  const scan = typeof techHas === 'function' && techHas('fossilScan') ? 0.8 : 1,
+    full = typeof artifactCollection === 'function' && artifactCollection().seen >= Object.keys(ARTIFACTS).length ? 0.9 : 1;
+  return ARTIFACT_STEP * (1 + 0.25 * found) * scan * full;
 }
 function artifactTable(depth) {
   return ARTIFACT_TABLES.find(t => depth >= t.from && depth <= t.to) || ARTIFACT_TABLES[0];
@@ -78,6 +85,7 @@ function artifactProgress(planet, mined) {
     s.seq++;
     const item = { id: s.seq, type: artifactPick(deepest, s.seq), depth: deepest, fav: false };
     s.items.push(item);
+    if (s.seen) s.seen[item.type] = true;
     finds.push(item);
     if (typeof GameEvents !== 'undefined' && !offlineMode) GameEvents.emit('artifact', { planet, type: item.type });
   }
@@ -115,3 +123,55 @@ function artifactFavourite(id) {
   a.fav = !a.fav;
   return a.fav;
 }
+
+// ----- Beta 1.9 M6: finds as research and recipe inputs, the collection -----
+// A find can be an input wherever the Fertigung or the research takes materials (fabStock / fabSetStock): its stock is
+// the number of non-favourite finds of that type (favourites stay protected, as from selling). Finds are account-level,
+// so every colony's Fertigung sees the same collection. A cancelled batch gives its find back (a new item, the draw
+// counter of future finds is not touched). The collection: every type ever found counts; with all five the finds come
+// 10 % sooner (artifactThreshold).
+function artifactCount(type) {
+  return artifactState().items.filter(a => a.type === type && !a.fav).length;
+}
+function artifactSeen() {
+  const s = artifactState();
+  if (!s.seen) s.seen = {};
+  for (const a of s.items) s.seen[a.type] = true;
+  return s.seen;
+}
+function artifactCollection() {
+  const seen = artifactSeen();
+  return { seen: Object.keys(ARTIFACTS).filter(t => seen[t]).length, total: Object.keys(ARTIFACTS).length };
+}
+const fabStockBeforeArtifacts = fabStock,
+  fabSetStockBeforeArtifacts = fabSetStock,
+  fabNameBeforeArtifacts = fabName,
+  fabIconBeforeArtifacts = fabIcon;
+fabStock = (planet, id) => (ARTIFACTS[id] ? artifactCount(id) : fabStockBeforeArtifacts(planet, id));
+fabSetStock = (planet, id, value) => {
+  if (!ARTIFACTS[id]) return fabSetStockBeforeArtifacts(planet, id, value);
+  const s = artifactState();
+  let diff = Math.round(value) - artifactCount(id);
+  while (diff < 0) {
+    const i = s.items.findIndex(a => a.type === id && !a.fav);
+    if (i < 0) break;
+    s.items.splice(i, 1);
+    s.used = (s.used || 0) + 1;
+    diff++;
+  }
+  while (diff > 0 && s.items.length < ARTIFACT_MAX) {
+    s.items.push({ id: Math.max(s.seq, ...s.items.map(a => a.id)) + 1, type: id, depth: 3, fav: false });
+    s.used = Math.max(0, (s.used || 0) - 1); // a find given back was not used
+    diff--;
+  }
+};
+fabName = id => (ARTIFACTS[id] ? ARTIFACTS[id].name : fabNameBeforeArtifacts(id));
+fabIcon = id => (ARTIFACTS[id] ? ARTIFACTS[id].icon : fabIconBeforeArtifacts(id));
+// what a find is good for (shown on its card before any tap)
+const ARTIFACT_USES = {
+  geode: 'Resonanzlinse (Fertigung, Orion)',
+  fossil: 'Forschung Fossilkunde',
+  relic: 'Schildprojektor (Fertigung, Mekhanos)',
+  rareOre: '',
+  motteTech: ''
+};

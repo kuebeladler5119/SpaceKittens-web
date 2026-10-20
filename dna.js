@@ -38,14 +38,38 @@ const DNA_ARCHETYPES = {
 const DNA_CHASSIS = {
   // Beta 1.5: each chassis also has a real weakness — armorPierce = share of a hit that goes through 50 % armour plates
   // (the old guns: 0.5), falloff = distance from which the scatter gun loses punch, close = point-blank range where it hits ×1.5
-  repeater: { name: 'Repetierer', archetype: 'cannon', fire: 'stream', projectile: 'bolt', rate: 1.6, damage: 0.625, speed: 900, size: 3, armorPierce: 0.35, text: 'Schnelle Salven kleiner Bolzen – gut gegen Schwärme, prallt an Panzerung ab' },
-  heavy: { name: 'Schwerkanone', archetype: 'cannon', fire: 'single', projectile: 'shell', rate: 0.6, damage: 1.667, speed: 520, size: 8, armorPierce: 0.85, text: 'Langsame, schwere Granaten – durchschlagen Panzerung, verschwenden sich an Schwärmen' },
+// Gameplay loop: vs = the chassis' role against enemy families (×damage), so three directions really play differently,
+// measured with tools/chassis-probe.mjs (docs/gameplay-loop/BALANCE.md): Schwarmfeuer (repeater, prism, scatter) against
+// swarms and fast disruptors, Brecher (heavy, mortar) against armour, elites and guardians, Präzision (lance): no role
+// bonus, it never misses and pierces a line. The lance's numbers are those of Beta 1.6 (existing lance saves keep every
+// measured win; a line falloff was tried and taken back, docs/gameplay-loop/BALANCE.md).
+  repeater: { name: 'Repetierer', archetype: 'cannon', fire: 'stream', projectile: 'bolt', rate: 1.6, damage: 0.625, speed: 1200, size: 3, armorPierce: 0.35, vs: { swarm: 1.6, disruptor: 1.5 }, text: 'Schnelle Salven kleiner Bolzen – gut gegen Schwärme, prallt an Panzerung ab' },
+  heavy: { name: 'Schwerkanone', archetype: 'cannon', fire: 'single', projectile: 'shell', rate: 0.6, damage: 1.667, speed: 520, size: 8, armorPierce: 1, vs: { heavy: 1.3, elite: 1.35, boss: 1.4, swarm: 0.8 }, text: 'Langsame, schwere Granaten – durchschlagen Panzerung, verschwenden sich an Schwärmen' },
   lance: { name: 'Lanze', archetype: 'beam', fire: 'beam', projectile: 'ray', rate: 0.8, damage: 1.25, speed: 0, size: 3, pierce: 2, armorPierce: 0.6, text: 'Strahl, der bis zu drei Gegner in einer Linie trifft – langsamer Takt' },
-  prism: { name: 'Prisma', archetype: 'beam', fire: 'split', projectile: 'ray', rate: 1, damage: 0.4, speed: 0, size: 2, count: 3, armorPierce: 0.45, text: 'Teilt sich in drei Strahlen auf drei Ziele – schwach gegen einen einzelnen Boss' },
-  scatter: { name: 'Streuer', archetype: 'launcher', fire: 'spread', projectile: 'pellet', rate: 0.9, damage: 0.45, speed: 700, size: 3, count: 3, spread: 0.2, armorPierce: 0.4, falloff: 90, close: 45, text: 'Fächer aus drei Schrotkugeln – stark aus der Nähe, verliert auf Distanz' },
-  mortar: { name: 'Mörser', archetype: 'launcher', fire: 'lob', projectile: 'orb', rate: 0.5, damage: 1.6, speed: 380, size: 9, splash: 70, armorPierce: 0.75, text: 'Bogenschuss mit Flächenschaden – trifft, wo der Gegner war' }
+  prism: { name: 'Prisma', archetype: 'beam', fire: 'split', projectile: 'ray', rate: 1, damage: 0.4, speed: 0, size: 2, count: 3, armorPierce: 0.45, vs: { swarm: 1.5, support: 1.3, summoner: 1.3, disruptor: 1.2 }, text: 'Teilt sich in drei Strahlen auf drei Ziele – schwach gegen einen einzelnen Boss' },
+  scatter: { name: 'Streuer', archetype: 'launcher', fire: 'spread', projectile: 'pellet', rate: 0.9, damage: 0.46, speed: 700, size: 3, count: 3, spread: 0.1, armorPierce: 0.4, falloff: 90, close: 60, vs: { swarm: 1.35, elemental: 1.2 }, text: 'Fächer aus drei Schrotkugeln – stark aus der Nähe, verliert auf Distanz' },
+  mortar: { name: 'Mörser', archetype: 'launcher', fire: 'lob', projectile: 'orb', rate: 0.5, damage: 1.6, speed: 380, size: 9, splash: 90, armorPierce: 0.9, vs: { heavy: 1.2, artillery: 1.3, summoner: 1.2, disruptor: 0.8 }, text: 'Bogenschuss mit Flächenschaden – trifft, wo der Gegner war' }
 };
 const DNA_CHASSIS_IDS = Object.keys(DNA_CHASSIS);
+// Gameplay loop: one tuning per direction, a real choice that changes how the weapon plays (not more damage). Stored on
+// the weapon (w.tune = the id), switched for free in the Werft outside a fight; without it the weapon is as before.
+//   hunt (Schwarmfeuer): the ship picks disruptors, supports and summoners first by itself; −15 % against the rest
+//   stagger (Brecher): a hit pushes the target's next shot back by 1 s (never a guardian's); −15 % fire rate
+//   aim (Präzision): no pierce, +25 % damage, +20 % more on the enemy the player tapped (the Fokusziel)
+const DNA_TUNES = {
+  hunt: { name: 'Störerjagd', dir: 'Schwarmfeuer', prey: ['disruptor', 'support', 'summoner'], others: 0.85, text: 'Zielt von selbst zuerst auf Störer, Unterstützer und Rufer (das Prisma bündelt dann alle drei Strahlen auf sie) · −15 % gegen alle anderen', use: 'Wellen mit Störern und Heilern: Schild und Salve bleiben frei' },
+  // Beta 1.9 M8: the scatter's own decision (before it shared Störerjagd and had no fight where it was the best pick):
+  // its pellets catch small straight enemy shots they touch (a pellet is used up by it); −20 % damage
+  guard: { name: 'Abwehrfächer', dir: 'Schwarmfeuer', damage: 0.8, catchR: 2.6, text: 'Die Schrotkugeln fangen kleine feindliche Geschosse ab (eine Kugel je Geschoss) · −20 % Schaden', use: 'Wellen mit vielen Schützen: weniger Treffer am Schiff, dafür längere Kämpfe' },
+  stagger: { name: 'Erschütterung', dir: 'Brecher', delay: 1, rate: 0.85, text: 'Jeder Treffer schiebt den nächsten Schuss des Getroffenen um 1 s auf (nicht bei Wächtern) · −15 % Feuerrate', use: 'viele Schützen: weniger Treffer am Schiff, dafür längere Kämpfe' },
+  aim: { name: 'Einzelstrahl', dir: 'Präzision', damage: 1.25, tapped: 1.2, text: 'Kein Durchschlag · +25 % Schaden · +20 % mehr auf das angetippte Fokusziel', use: 'Elite und Wächter: antippen, was zuerst fallen soll' }
+};
+const DNA_TUNE_FOR = { repeater: 'hunt', prism: 'hunt', scatter: 'guard', heavy: 'stagger', mortar: 'stagger', lance: 'aim' };
+// the tuning of a weapon that is really on (an id of another chassis or an unknown id counts as none)
+function dnaTune(dna) {
+  const id = DNA_TUNE_FOR[dna?.chassis];
+  return id && dna.tune === id ? id : null;
+}
 // Affixes: small, readable modifiers (no hidden randomness in combat — every value is fixed by the identity).
 const DNA_AFFIXES = {
   swift: { name: 'Schnell', text: '+12 % Feuerrate', rate: 0.12 },
@@ -95,11 +119,15 @@ function dnaStats(dna) {
   const c = DNA_CHASSIS[dna?.chassis] || DNA_CHASSIS.repeater,
     has = id => (dna?.affixes || []).includes(id),
     power = DNA_RARITY_POWER[dna?.rarity] || 1;
+  const tune = dnaTune(dna),
+    T = tune ? DNA_TUNES[tune] : {};
   return {
-    rate: c.rate * (1 + (has('swift') ? DNA_AFFIXES.swift.rate : 0)),
-    damage: c.damage * power * (1 + (has('heavy') ? DNA_AFFIXES.heavy.damage : 0)),
+    rate: c.rate * (1 + (has('swift') ? DNA_AFFIXES.swift.rate : 0)) * (T.rate || 1),
+    damage: c.damage * power * (1 + (has('heavy') ? DNA_AFFIXES.heavy.damage : 0)) * (T.damage || 1),
     boss: has('focus') ? DNA_AFFIXES.focus.boss : 0,
-    pierce: (c.pierce || 0) + (has('pierce') ? 1 : 0),
+    pierce: tune === 'aim' ? 0 : (c.pierce || 0) + (has('pierce') ? 1 : 0),
+    tune,
+    vs: c.vs || null,
     count: c.count || 1,
     spread: c.spread || 0,
     splash: (c.splash || 0) * (1 + (has('splash') ? DNA_AFFIXES.splash.splash : 0)),

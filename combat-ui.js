@@ -146,7 +146,7 @@ function renderCombatHud() {
   // Player plate: same pilot rig as the cockpit (Kit portrait), real ship/weapon/damage.
   const Kit = window.SpaceKittens,
     mood = window.NebulaScenesRuntime?.mounted?.combat?.scene.pilotMood?.() || 'focus',
-    portrait = Kit?.portraitURL?.(combatPilot(), mood, 96) || '',
+    portrait = (typeof kitPortraitURL === 'function' ? kitPortraitURL(combatPilot() === 1 ? 'boba' : 'mochi', mood, 96) : Kit?.portraitURL?.(combatPilot(), mood, 96)) || '',
     hot = now < state.overchargeUntil,
     auto = autoAttack(),
     ocLeft = Math.max(0, state.overchargeUntil - now);
@@ -257,12 +257,26 @@ function moduleDelta(kind) {
   const level = state.ship[kind] || 0,
     next = { [kind]: level + 1 };
   if (kind === 'weapon' || kind === 'core') return 'Schaden ' + fmt(attack()) + ' → ' + fmt(withShip(next, attack));
-  if (kind === 'hull') return 'Beute-Chance +' + level * 2 + ' % → +' + (level + 1) * 2 + ' %';
-  const now = expeditionDuration(),
+  // Gameplay loop: the combat effect first (what the defeat analysis and the arena use), the older side effect second
+  // (hull: loot chance of the sector defence; engine: expedition time). Before, the Werft named only the side effect.
+  const rate = r => r.toFixed(2).replace('.', ',');
+  if (kind === 'hull') {
+    const hullNow = shipHullMax(),
+      hullNext = shipHullMax({ ...state.ship, hull: level + 1 });
+    return (hullNext > hullNow ? 'Hülle ' + fmt(hullNow) + ' → ' + fmt(hullNext) + ' Punkte' : 'Hülle am Maximum (' + fmt(hullNow) + ')') + ' · Beute-Chance +' + (level + 1) * 2 + ' %';
+  }
+  // the fire rate the ship really has in the arena (with the mounted DNA weapon and refits), as on the prep screen
+  const base = shipFireRate(),
+    real = typeof arenaLoadout === 'function' ? arenaLoadout().rate : base,
+    rateNow = real,
+    rateNext = (real * shipFireRate({ ...state.ship, engine: level + 1 })) / Math.max(1e-9, base),
+    now = expeditionDuration(),
     after = withShip(next, expeditionDuration);
-  return after < now
-    ? 'Expedition ' + Math.round(now / 1000) + ' s → ' + Math.round(after / 1000) + ' s'
-    : 'Expedition am Minimum (' + Math.round(now / 1000) + ' s)';
+  return (
+    (rateNext > rateNow ? 'Feuerrate ' + rate(rateNow) + ' → ' + rate(rateNext) + ' Schuss/s' : 'Feuerrate am Maximum (' + rate(rateNow) + ' Schuss/s)') +
+    ' · ' +
+    (after < now ? 'Expedition ' + Math.round(now / 1000) + ' → ' + Math.round(after / 1000) + ' s' : 'Expedition am Minimum')
+  );
 }
 function workshopDetailHTML() {
   const p = workshopPreview,
@@ -313,7 +327,7 @@ function renderWorkshop() {
     palette = shipPalette(),
     gear = previewGear(),
     previewing = workshopPreview.kind !== 'current',
-    big = Art.shipPreviewURL(gear.model, gear, palette, pilot, 640, 300),
+    big = Art.shipPreviewURL(gear.model, gear, palette, pilot, 640, 300, { fx: true }),
     now = previewing ? Art.shipPreviewURL(state.ship.model, state.ship, palette, pilot, 240, 120) : '';
   setHTML(
     stage,

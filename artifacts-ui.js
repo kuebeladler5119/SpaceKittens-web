@@ -29,13 +29,19 @@ function renderArtifacts() {
       .reverse()
       .map(a => {
         const def = ARTIFACTS[a.type];
-        return `<article class="artifact-card ${def.rarity} ${a.fav ? 'fav' : ''}"><span class="artifact-icon" aria-hidden="true">${def.icon}</span><div><b>${def.name}</b><small>${ARTIFACT_RARITY[def.rarity]} · aus Tiefe ${a.depth}</small><p>${def.text}</p></div><div class="artifact-actions"><button data-artifact-fav="${a.id}" aria-pressed="${a.fav}" aria-label="${a.fav ? 'Schutz aufheben' : 'Schützen (nicht verkaufen oder analysieren)'}">${a.fav ? '★' : '☆'}</button><button data-artifact-analyse="${a.id}" ${a.fav ? 'disabled' : ''}>ANALYSIEREN · ${artifactGainText(def.analyse)}</button><button data-artifact-sell="${a.id}" ${a.fav ? 'disabled' : ''}>VERKAUFEN · ◈ ${fmt(def.sell)}</button></div></article>`;
+        return `<article class="artifact-card ${def.rarity} ${a.fav ? 'fav' : ''}"><span class="artifact-icon" aria-hidden="true">${def.icon}</span><div><b>${def.name}</b><small>${ARTIFACT_RARITY[def.rarity]} · aus Tiefe ${a.depth}</small><p>${def.text}</p>${ARTIFACT_USES?.[a.type] ? `<p class="artifact-use">Zutat für: ${ARTIFACT_USES[a.type]}</p>` : ''}</div><div class="artifact-actions"><button data-artifact-fav="${a.id}" aria-pressed="${a.fav}" aria-label="${a.fav ? 'Schutz aufheben' : 'Schützen (nicht verkaufen oder analysieren)'}">${a.fav ? '★' : '☆'}</button><button data-artifact-analyse="${a.id}" ${a.fav ? 'disabled' : ''}>ANALYSIEREN · ${artifactGainText(def.analyse)}</button><button data-artifact-sell="${a.id}" ${a.fav ? 'disabled' : ''}>VERKAUFEN · ◈ ${fmt(def.sell)}</button></div></article>`;
       })
       .join(''),
     odds = ARTIFACT_TABLES.map(t => `<li><b>${t.name}</b> ${Object.entries(t.odds).map(([type, p]) => ARTIFACTS[type].icon + ' ' + ARTIFACTS[type].name + ' ' + p + ' %').join(' · ')}</li>`).join('');
+  // Beta 1.9 M6: the collection – every type ever found; all five bring finds 10 % sooner
+  const col = typeof artifactCollection === 'function' ? artifactCollection() : null,
+    seen = col ? artifactSeen() : {},
+    collection = col
+      ? `<div class="artifact-collection"><b>Sammlung ${col.seen}/${col.total}</b> ${Object.keys(ARTIFACTS).map(t => `<span class="${seen[t] ? 'seen' : 'unseen'}" title="${seen[t] ? ARTIFACTS[t].name : 'noch nicht gefunden'}">${seen[t] ? ARTIFACTS[t].icon : '?'}</span>`).join('')}<small>${col.seen >= col.total ? 'Vollständig: Funde kommen 10 % früher.' : 'Vollständig bringt sie Funde 10 % früher.'}</small></div>`
+      : '';
   setHTML(
     panel,
-    `<p class="tech-note">Tiefe Schächte (ab Tiefe 3) stoßen beim Fördern auf Fundstücke: je ${fmt(artifactThreshold())} geförderte Einheiten ein Fund – jeder Fund macht den nächsten etwas seltener. Nächster Fund: ${Math.round(progress * 100)} %.</p><i class="station-bar"><u style="width:${Math.round(progress * 100)}%"></u></i>
+    `${collection}<p class="tech-note">Tiefe Schächte (ab Tiefe 3) stoßen beim Fördern auf Fundstücke: je ${fmt(artifactThreshold())} geförderte Einheiten ein Fund – jeder Fund macht den nächsten etwas seltener. Nächster Fund: ${Math.round(progress * 100)} %.</p><i class="station-bar"><u style="width:${Math.round(progress * 100)}%"></u></i>
     <div class="artifact-list">${items || '<p class="tech-note">Noch keine Fundstücke. Baue Schacht 3 und fördere in der Tiefe.</p>'}</div>
     <details class="artifact-odds"><summary>Fundchancen (feste Tabelle)</summary><ul>${odds}</ul><p class="tech-note">Höchstens 2 Funde je Produktionsschritt, auch nach langer Abwesenheit. Der Zufall kommt aus deinem Spielstand – Neu laden ändert nichts.</p></details>`
   );

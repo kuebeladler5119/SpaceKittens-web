@@ -10,6 +10,9 @@
 // A step counts as learned when the player really did it (game events) or the state shows it. Nothing here grants,
 // skips or locks anything.
 const ONBOARDING_STEPS = ['mine', 'rail', 'stall', 'upgrade', 'manager'];
+// Beta 1.8 FTUE 2.0: one-time discoveries after the first steps (ftue.js), each shown once when it becomes relevant;
+// seen[id] = true once shown, dismissed or already done. Nothing is granted by them.
+const ONBOARDING_DISCOVERIES = ['chain', 'mine', 'headframe', 'elevator', 'back', 'refinery'];
 // a save this far along has clearly found its way (an older save, or a player who went ahead without the hints)
 const ONBOARDING_GRADUATE_EARNED = 5000;
 
@@ -44,11 +47,13 @@ function onboardingLearnedFromState(source) {
 }
 
 function normalizeOnboarding(raw, source) {
-  const fresh = { done: false, hidden: false, learned: {}, celebrate: false };
+  const fresh = { done: false, hidden: false, learned: {}, celebrate: false, seen: {} };
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    const learned = {};
+    const learned = {},
+      seen = {};
     for (const id of ONBOARDING_STEPS) if (raw.learned?.[id] === true) learned[id] = true;
-    return { done: raw.done === true, hidden: raw.hidden === true, learned, celebrate: raw.celebrate === true && raw.done !== true };
+    for (const id of ONBOARDING_DISCOVERIES) if (raw.seen?.[id] === true) seen[id] = true;
+    return { done: raw.done === true, hidden: raw.hidden === true, learned, celebrate: raw.celebrate === true && raw.done !== true, seen };
   }
   // no save at all: a brand-new game starts the first steps
   if (!source || !source.meta) return fresh;

@@ -752,6 +752,12 @@ function manualShaft(id, planet = state.activePlanet) {
   GameEvents.emit('shaft-work', { planet, shaft: id, queue: m.queue });
   return m.queue;
 }
+// R1: the mine is open and nobody runs the elevator – nothing reaches the surface by itself (the
+// colony said "Alles läuft" meanwhile; docs/release-r1/BUG_TRIAGE.md R1-04)
+function liftWaiting(planet = state.activePlanet) {
+  // from the moment the mine opens (its first shaft fills within seconds) until an operator runs the lift
+  return undergroundOpen(planet) && !isAutomated('elevator', planet) && builtShafts(planet).length > 0;
+}
 // Manual elevator: starts one real round trip from the surface (the same state machine the manager uses).
 function manualElevator(planet = state.activePlanet) {
   if (!undergroundOpen(planet)) return 0;

@@ -288,6 +288,18 @@
       ctx.ellipse(x, y - 1.72 * k, (0.25 + r * 0.22) * k, (0.05 + r * 0.04) * k, 0, 0, TAU);
       ctx.stroke();
     }
+    // P1.5: the depot look as a cap over the root store
+    if (o.skin)
+      A().roofLook?.(
+        ctx,
+        o.skin,
+        c => c.ellipse(x, y - 1.78 * k, 1.3 * k, 0.42 * k, 0, Math.PI, TAU),
+        { x0: x - 1.3 * k, y0: y - 2.2 * k, x1: x + 1.3 * k, y1: y - 1.78 * k },
+        { x: x + 0.35 * k, y: y - 2.12 * k },
+        k,
+        o.time || 0,
+        o
+      );
     fillRR(ctx, x - 0.38 * k, y - 0.95 * k, 0.76 * k, 0.95 * k, 0.38 * k, P.ink);
     glowC(ctx, x, y - 0.5 * k, 0.4 * k, P.mint, o.active ? 0.5 : 0.25);
     const fill = Math.max(0, Math.min(1, o.fill || 0));
@@ -309,13 +321,17 @@
     const open = o.level >= 25 ? 1 : o.level >= 10 ? 0.85 : 0.7;
     for (let i = 0; i < 5; i++) {
       const a = Math.PI + (i / 4) * Math.PI;
-      blob(ctx, x + Math.cos(a) * 0.8 * k * open, y - 2.1 * k + Math.sin(a) * 0.35 * k, 0.6 * k * open, 0.24 * k, i % 2 ? P.petal : '#ffb8da', a + Math.PI / 2);
+      // P1.5: a stall look is the flower canopy's own colours (its awning stripes as petals, its light as the heart)
+      const sk = o.skin && A().STALL_SKINS?.[o.skin];
+      blob(ctx, x + Math.cos(a) * 0.8 * k * open, y - 2.1 * k + Math.sin(a) * 0.35 * k, 0.6 * k * open, 0.24 * k, sk ? sk.awning[i % 2] : i % 2 ? P.petal : '#ffb8da', a + Math.PI / 2);
     }
-    blob(ctx, x, y - 2.15 * k, 0.25 * k, 0.18 * k, P.pollen);
+    const heart = o.skin && A().STALL_SKINS?.[o.skin];
+    blob(ctx, x, y - 2.15 * k, 0.25 * k, 0.18 * k, heart ? heart.roof : P.pollen);
+    if (heart?.icicles) A().icicles?.(ctx, x - 1.0 * k, y - 2.0 * k, 2.0 * k, k * 0.4, 6);
     const counter = { x0: x - 1.1 * k, y0: y - 0.75 * k, x1: x + 1.1 * k, y1: y };
     fillRR(ctx, counter.x0, counter.y0, 2.2 * k, 0.75 * k, 0.15 * k, P.bark);
     fillRR(ctx, counter.x0 + 0.05 * k, counter.y0, 2.1 * k, 0.14 * k, 0.07 * k, P.leaf);
-    for (let i = 0; i < 4; i++) glowC(ctx, x - 0.75 * k + i * 0.5 * k, y - 0.88 * k, 0.09 * k, i % 2 ? P.pollen : '#5fe0a0', o.saleGlow ? 0.95 : 0.6);
+    for (let i = 0; i < 4; i++) glowC(ctx, x - 0.75 * k + i * 0.5 * k, y - 0.88 * k, 0.09 * k, heart ? heart.lights[i % 3] : i % 2 ? P.pollen : '#5fe0a0', o.saleGlow ? 0.95 : 0.6);
     plaque(ctx, x, y + 0.18 * k, k, 'Blütenmarkt Lv ' + o.level, P.petal);
     return { x0: x - 1.4 * k, y0: y - 2.5 * k, x1: x + 1.4 * k, y1: y + 0.6 * k, counter };
   }

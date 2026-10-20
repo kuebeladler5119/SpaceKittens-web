@@ -1162,8 +1162,9 @@ function toast(message) {
 }
 // Kitten portrait for crew cards; falls back to the old icon where canvas is unavailable.
 function kittenAvatar(index, icon, active) {
-  const accessory = index === 0 ? state.meta?.equipped?.mochi : null,
-    url = window.SpaceKittens?.portraitURL(index, active ? 'happy' : 'neutral', 96, accessory ? [accessory] : null);
+  // P1: Mochi, Boba and Pip in what they wear (the Kätzchen-Studio); the other crew in their own look
+  const char = { 0: 'mochi', 1: 'boba', 3: 'pip' }[index],
+    url = char && typeof kitPortraitURL === 'function' ? kitPortraitURL(char, active ? 'happy' : 'neutral', 96) : window.SpaceKittens?.portraitURL(index, active ? 'happy' : 'neutral', 96, null);
   return url ? `<img src="${url}" alt="" width="56" height="56" />` : icon;
 }
 function renderShipPreview() {
@@ -1531,6 +1532,8 @@ function render() {
     Pioneer: '+8% Grundschaden bei Erkundungsmissionen.',
     Vanguard: '+10% Präzisionsschaden im Zielmodus.'
   }[state.ship.model];
+  // Visual Identity round: the ship's DNA in one line (role · tier · build) from the central visual language
+  if ($('shipDnaLine') && window.DnaVisuals) $('shipDnaLine').textContent = 'DNA: ' + window.DnaVisuals.shipText(state.ship.model, state.ship, typeof mountedDna === 'function' ? mountedDna() : null);
   $('workshop').classList.toggle('overcharged', Date.now() < state.overchargeUntil);
   // the model/weapon buttons only exist in the workshop's detail panel (combat-ui.js)
   const workshopDetail = $('workshopDetail') || document;
@@ -2057,6 +2060,7 @@ function renderSectorObjective() {
     $('objectiveText').textContent = 'Der Scan eröffnet einen neuen Handelsweg nach Vesper.';
     $('objectiveAction').textContent = 'KARTE ›';
     $('objectiveCard').dataset.screen = 'trade';
+    $('objectiveCard').dataset.tab = 'planets'; // R1: the sector lives in the Planeten area (views-ux.js)
     return;
   }
   if (expedition) {
@@ -2065,6 +2069,7 @@ function renderSectorObjective() {
     $('objectiveText').textContent = 'Die Vesper-Route wird nach Rückkehr dauerhaft nutzbar.';
     $('objectiveAction').textContent = 'KARTE ›';
     $('objectiveCard').dataset.screen = 'trade';
+    $('objectiveCard').dataset.tab = 'planets'; // R1: the sector lives in the Planeten area (views-ux.js)
     return;
   }
   if (state.sectorScans[0] < first.scans) {
@@ -2074,8 +2079,10 @@ function renderSectorObjective() {
       'Erzeuge ' +
       (first.scans - state.sectorScans[0]) +
       ' weitere Scanprofile für eine sichere oder riskante Expedition.';
-    $('objectiveAction').textContent = 'SCANNEN ›';
+    // R1: named as the sector's button is written (SCAN 0/3) – the Signal-Scanner's ✦ SCANNEN is another feature
+    $('objectiveAction').textContent = 'SCAN ›';
     $('objectiveCard').dataset.screen = 'trade';
+    $('objectiveCard').dataset.tab = 'planets';
   }
 }
 function renderProgressionContent() {
@@ -2453,12 +2460,12 @@ function renderFactionCommand() {
     }).join('')
   );
 }
-// Brand portrait follows Mochi's equipped accessory (redrawn only when it changes).
+// Brand portrait follows what Mochi wears (redrawn only when it changes).
 let brandAccessory;
 function renderMochiBrand() {
-  const accessory = state.meta.equipped.mochi || '';
+  const accessory = typeof kitWornIds === 'function' ? kitWornIds('mochi').join(',') : state.meta.equipped.mochi || '';
   if (accessory === brandAccessory) return;
-  const url = window.SpaceKittens?.portraitURL(0, 'happy', 96, accessory ? [accessory] : null);
+  const url = typeof kitPortraitURL === 'function' ? kitPortraitURL('mochi', 'happy', 96) : window.SpaceKittens?.portraitURL(0, 'happy', 96, null);
   if (!url) return;
   brandAccessory = accessory;
   document.getElementById('brandKitten')?.setAttribute('src', url);
@@ -3467,7 +3474,12 @@ document.addEventListener('click', event => {
   const equip = event.target.closest('[data-equip]');
   if (equip) {
     const item = Commerce.COSMETICS[equip.dataset.equip];
-    if (item && state.meta.cosmetics.includes(equip.dataset.equip)) {
+    if (item?.wear && state.meta.cosmetics.includes(equip.dataset.equip)) {
+      wardrobeToggle('mochi', equip.dataset.equip);
+      applyCosmetics();
+      save();
+      renderShop();
+    } else if (item && state.meta.cosmetics.includes(equip.dataset.equip)) {
       state.meta.equipped[item.slot] =
         state.meta.equipped[item.slot] === equip.dataset.equip ? null : equip.dataset.equip;
       applyCosmetics();
@@ -4065,7 +4077,12 @@ window.NebulaView.colony = () => {
     pips: state.activePlanet === 0 ? pips().stage : null,
     liberated: state.meta.story.liberated.includes(state.activePlanet),
     mochiAccessories: [state.meta.equipped.mochi, state.meta.equipped.outfit].filter(Boolean),
-    cosmeticColony: state.meta.equipped.colony || null
+    cosmeticColony: state.meta.equipped.colony || null,
+    cosmeticStall: state.meta.equipped.stall || null,
+    // P1.5: the vehicle paint, the depot roof and this planet's decoration (meta.decor, mirrored in equipped.decor)
+    cosmeticVehicle: state.meta.equipped.vehicle || null,
+    cosmeticDepot: state.meta.equipped.depot || null,
+    cosmeticDecor: state.meta.decor?.[state.activePlanet] || null
   };
 };
 const baseCombatView = window.NebulaView.combat;
@@ -4196,7 +4213,9 @@ function showNextStoryLine() {
   const portrait = extra
     ? extra.portrait()
     : index !== undefined
-      ? window.SpaceKittens?.portraitURL(index, speaker === 'mochi' ? 'happy' : 'neutral', 96, index === 0 ? [state.meta.equipped.mochi, state.meta.equipped.outfit].filter(Boolean) : null)
+      ? { 0: 'mochi', 1: 'boba', 3: 'pip' }[index] && typeof kitPortraitURL === 'function'
+        ? kitPortraitURL({ 0: 'mochi', 1: 'boba', 3: 'pip' }[index], speaker === 'mochi' ? 'happy' : 'neutral', 96)
+        : window.SpaceKittens?.portraitURL(index, speaker === 'mochi' ? 'happy' : 'neutral', 96, null)
       : speaker === 'pips'
         ? window.NebulaArt?.botPortraitURL?.(pipsFriendly() || pips().stage === 'defeated')
         : '';
@@ -4215,7 +4234,7 @@ function claimWelcome() {
     item = pool[Math.floor(Math.random() * pool.length)];
   state.meta.welcome = { item, at: Date.now() };
   if (!state.meta.cosmetics.includes(item)) state.meta.cosmetics.push(item);
-  state.meta.equipped.mochi = item;
+  wardrobeEquip('mochi', item);
   // The result is committed to storage before it is revealed (no reroll by reloading).
   save();
   feedback('reward', 'success');
@@ -4230,15 +4249,15 @@ function showWelcomeResult() {
     url = window.SpaceKittens?.portraitURL(0, 'happy', 160, [item]);
   $('capsuleArt').innerHTML = url ? `<img src="${url}" alt="Mochi mit ${cosmetic.name}" />` : cosmetic.icon;
   $('capsuleItem').textContent = cosmetic.name;
-  $('capsuleEquip').textContent = state.meta.equipped.mochi === item ? 'ABLEGEN' : 'ANLEGEN';
+  $('capsuleEquip').textContent = kitWornIds('mochi').includes(item) ? 'ABLEGEN' : 'ANLEGEN';
   openModal('capsuleModal');
 }
 
 $('capsuleEquip').onclick = () => {
   const item = state.meta.welcome?.item;
   if (!item || !state.meta.cosmetics.includes(item)) return;
-  state.meta.equipped.mochi = state.meta.equipped.mochi === item ? null : item;
-  $('capsuleEquip').textContent = state.meta.equipped.mochi === item ? 'ABLEGEN' : 'ANLEGEN';
+  wardrobeToggle('mochi', item);
+  $('capsuleEquip').textContent = kitWornIds('mochi').includes(item) ? 'ABLEGEN' : 'ANLEGEN';
   save();
   render();
 };

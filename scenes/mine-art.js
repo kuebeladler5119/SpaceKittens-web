@@ -504,6 +504,110 @@
     if (stage >= 4) glow(ctx, x, top - 0.55 * k, 0.22 * k, Math.sin(t * 3) > 0 ? '#ff8f8f' : '#ffe9a8', 0.95);
     return { x0: x - 1 * k, y0: top - 0.5 * k, x1: x + 1 * k, y1: ground };
   }
+  // Beta 1.9 M1/M2: "Förderung oben" – the cabin as the underground moves it (deepcore.js elevator phases), shown in the
+  // surface headframe: it rises out of the shaft in the last half of its ascent, tips its load down the chute to the
+  // Halde while unloading, waits full with a red lamp when the Halde has no room, and sinks away on its next descent.
+  // The lift's look follows the cabin tier the player bought (LIFT_TIER, real ×3 load per tier): a rope winch (tier 0),
+  // a reinforced double-rope cage (1–2), a gravity lift with field rings and no ropes (3+). A small board on the tower
+  // shows the hand-over in one place: cabin ▲/▼/⇣, the Halde's fill, the loading cart's fill.
+  // o: { lift: { phase, progress, fill, tier } | null, pile (0..1), cart (0..1 | null), chuteDir (±1), accent }
+  function liftDisplay(ctx, x, ground, k, stage, t, o) {
+    const { line, fillRR, glow, crystal } = A();
+    const lift = o.lift,
+      hgt = (stage >= 3 ? 3.4 : stage === 2 ? 2.9 : 2.4) * k,
+      top = ground - hgt,
+      tier = lift?.tier || 0,
+      gravity = tier >= 3,
+      reinforced = tier >= 1 && !gravity,
+      platform = ground - hgt * 0.42,
+      phase = lift?.phase || 'surface_idle',
+      p = Math.max(0, Math.min(1, lift?.progress ?? 1)),
+      ease = v => v * v * (3 - 2 * v);
+    // the shaft mouth
+    fillRR(ctx, x - 0.42 * k, ground - 0.1 * k, 0.84 * k, 0.16 * k, 0.05 * k, 'rgba(10,8,24,0.75)');
+    let cabinY = null;
+    if (['surface_idle', 'surface_unloading', 'blocked_by_surface_capacity'].includes(phase)) cabinY = platform;
+    else if (phase === 'ascending' && p > 0.5) cabinY = ground + 0.3 * k + (platform - ground - 0.3 * k) * ease((p - 0.5) / 0.5);
+    else if (phase === 'descending' && p < 0.5) cabinY = platform + (ground + 0.3 * k - platform) * ease(p / 0.5);
+    if (gravity) {
+      // field rings around the shaft, pulsing upward while the cabin moves
+      for (let i = 0; i < 3; i++) {
+        const ry = ground - (0.6 + i * 0.75) * k,
+          a = 0.35 + 0.25 * Math.sin(t * 4 - i * 1.3) * (lift && phase !== 'surface_idle' ? 1 : 0.3);
+        ctx.strokeStyle = `rgba(143,240,212,${a.toFixed(3)})`;
+        ctx.lineWidth = 0.06 * k;
+        ctx.beginPath();
+        ctx.ellipse(x, ry, 0.55 * k, 0.12 * k, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (cabinY !== null) {
+      // the rope(s) from the winding wheel down to the cabin
+      const rope = reinforced ? '#e8e4fa' : '#3a2f5a';
+      line(ctx, x - (reinforced ? 0.1 : 0) * k, top, x - (reinforced ? 0.1 : 0) * k, cabinY - 0.5 * k, 0.03 * k, rope);
+      if (reinforced) line(ctx, x + 0.1 * k, top, x + 0.1 * k, cabinY - 0.5 * k, 0.03 * k, rope);
+    }
+    if (cabinY !== null && cabinY < ground + 0.2 * k) {
+      ctx.save();
+      // clip at the ground: the rising cabin comes out of the shaft
+      ctx.beginPath();
+      ctx.rect(x - 2 * k, top - 2 * k, 4 * k, ground - top + 2 * k);
+      ctx.clip();
+      const tip = phase === 'surface_unloading' ? Math.sin(Math.min(1, p) * Math.PI) * 0.5 : 0;
+      ctx.translate(x, cabinY);
+      ctx.rotate(-tip * o.chuteDir);
+      const body = gravity ? '#e8e4fa' : reinforced ? '#9aa6c8' : '#c99a6a',
+        rim = gravity ? o.accent : reinforced ? '#6f7da8' : '#9a6e48';
+      if (gravity) glow(ctx, 0, -0.2 * k, 0.6 * k, '#8ff0d4', 0.35);
+      const fill = phase === 'surface_unloading' ? (lift?.fill || 0) * (1 - p) : lift?.fill || 0,
+        n = fill > 0.03 ? Math.max(1, Math.round(fill * 3)) : 0;
+      for (let i = 0; i < n; i++) crystal(ctx, (i - 1) * 0.2 * k, -0.42 * k - (i % 2) * 0.05 * k, 0.2 * k, i % 2 ? o.accent : '#fff4ff', 0);
+      fillRR(ctx, -0.34 * k, -0.42 * k, 0.68 * k, 0.4 * k, 0.07 * k, body);
+      line(ctx, -0.34 * k, -0.42 * k, 0.34 * k, -0.42 * k, 0.05 * k, rim);
+      if (reinforced) [-0.2, 0.2].forEach(dx => line(ctx, dx * k, -0.42 * k, dx * k, -0.04 * k, 0.03 * k, rim));
+      ctx.restore();
+      // the load slides down the chute to the Halde while the cabin tips
+      if (phase === 'surface_unloading' && (lift?.fill || 0) > 0.03) {
+        const cx = x + o.chuteDir * 0.5 * k,
+          ex = x + o.chuteDir * 1.5 * k;
+        line(ctx, cx, platform - 0.1 * k, ex, ground - 0.25 * k, 0.07 * k, '#6f7da8');
+        for (let i = 0; i < 3; i++) {
+          const f = (t * 1.6 + i / 3) % 1;
+          crystal(ctx, cx + (ex - cx) * f, platform - 0.2 * k + (ground - 0.35 * k - platform + 0.1 * k) * f, 0.14 * k, i % 2 ? o.accent : '#fff4ff', f * 3);
+        }
+      }
+    }
+    if (phase === 'blocked_by_surface_capacity') glow(ctx, x + 0.45 * k, platform - 0.55 * k, 0.12 * k, Math.sin(t * 6) > 0 ? '#ff6b6b' : '#7a2a3a', 1);
+    // the gauge head above the winding wheel (free sky; the ground beside the tower belongs to the cart line and its
+    // signs): cabin load, Halde fill, loading cart fill as three upright gauge tubes in a frame of the tower's own metal,
+    // with the cabin's state as a lamp on top. P1.2: before, a dark board with three horizontal bars that read as a
+    // floating ≡ menu button in the scene.
+    const bw = 0.82 * k,
+      bh = 0.62 * k,
+      bx = x,
+      by = top - 0.42 * k - bh,
+      frame = stage === 1 ? '#a07a52' : stage === 2 ? '#9aa6c8' : '#c9d2ea',
+      blocked = phase === 'blocked_by_surface_capacity',
+      moving = ['ascending', 'departing_floor', 'loading', 'arriving_at_floor', 'descending'].includes(phase);
+    line(ctx, bx - 0.22 * k, by + bh, bx - 0.1 * k, top - 0.25 * k, 0.045 * k, frame);
+    line(ctx, bx + 0.22 * k, by + bh, bx + 0.1 * k, top - 0.25 * k, 0.045 * k, frame);
+    fillRR(ctx, bx - bw / 2, by, bw, bh, 0.14 * k, frame);
+    fillRR(ctx, bx - bw / 2 + 0.05 * k, by + 0.05 * k, bw - 0.1 * k, bh - 0.1 * k, 0.1 * k, '#f4f1ff');
+    const tube = (i, v, color) => {
+      const tx = bx + (i - 1) * 0.24 * k - 0.055 * k,
+        ty = by + 0.12 * k,
+        th = bh - 0.24 * k,
+        f = Math.max(0, Math.min(1, v));
+      fillRR(ctx, tx, ty, 0.11 * k, th, 0.05 * k, 'rgba(58,47,90,0.18)');
+      if (f > 0.01) fillRR(ctx, tx, ty + th * (1 - f), 0.11 * k, th * f, 0.05 * k, color);
+    };
+    tube(0, lift?.fill || 0, '#f0b43a'); // cabin load
+    tube(1, o.pile || 0, (o.pile || 0) >= 0.95 ? '#ff6b6b' : '#9a7cf0'); // Halde
+    if (o.cart !== null && o.cart !== undefined) tube(2, o.cart, '#4cc3ec'); // the cart loading at the Halde
+    // the state lamp: green blink while the cabin moves, steady mint at rest, red when the Halde has no room
+    const lamp = blocked ? (Math.sin(t * 6) > 0 ? '#ff6b6b' : '#a33a4a') : moving ? (Math.sin(t * 5) > -0.2 ? '#8ff0d4' : '#4aa890') : '#8ff0d4';
+    fillRR(ctx, bx - 0.09 * k, by - 0.13 * k, 0.18 * k, 0.15 * k, 0.06 * k, frame);
+    glow(ctx, bx, by - 0.1 * k, 0.09 * k, lamp, 0.95);
+  }
   // Construction frontier: dashed cavity outline, sign with cost or blocker, ghost drill.
   function frontier(ctx, x0, y0, w, fh, k, o) {
     const { fillRR, line } = A();
@@ -705,17 +809,22 @@
     ctx.restore();
   }
   // What a carrier moves, by the haul stage (carried crate / wheelbarrow / mine cart / belt tray).
-  function haulLoad(ctx, x, y, k, stage, fill, z, facing) {
+  // P1.5: o.skin = the vehicle paint (the barrow and the mine cart take it, with its ornament on their real state)
+  function haulLoad(ctx, x, y, k, stage, fill, z, facing, o = {}) {
     const { crate, fillRR, crystal } = A();
     const zz = zone(z),
-      f = Math.max(0.35, Math.min(1, fill));
+      f = Math.max(0.35, Math.min(1, fill)),
+      sk = A().vehicleSkin?.(o.skin),
+      orn = (x0, y0, w, h) => sk && A().vehicleOrnament(ctx, sk, x0, y0, w, h, k, o.time || 0, { loaded: fill > 0.02, moving: o.moving, reduced: o.reduced });
     if (stage === 2) {
-      fillRR(ctx, x - 0.32 * k * facing - 0.18 * k, y - 0.32 * k, 0.5 * k, 0.24 * k, 0.06 * k, '#a07a52');
+      fillRR(ctx, x - 0.32 * k * facing - 0.18 * k, y - 0.32 * k, 0.5 * k, 0.24 * k, 0.06 * k, sk ? sk.body : '#a07a52');
+      orn(x - 0.32 * k * facing - 0.18 * k, y - 0.32 * k, 0.5 * k, 0.24 * k);
       crystal(ctx, x - 0.32 * k * facing + 0.05 * k, y - 0.34 * k, 0.12 * k * f + 0.04 * k, zz.crystal[0], 0);
       return;
     }
     if (stage >= 3) {
-      fillRR(ctx, x - 0.3 * k, y - 0.42 * k, 0.6 * k, 0.32 * k, 0.06 * k, stage >= 4 ? '#4f5f9e' : '#6f7da8');
+      fillRR(ctx, x - 0.3 * k, y - 0.42 * k, 0.6 * k, 0.32 * k, 0.06 * k, sk ? sk.body : stage >= 4 ? '#4f5f9e' : '#6f7da8');
+      orn(x - 0.3 * k, y - 0.42 * k, 0.6 * k, 0.32 * k);
       crystal(ctx, x, y - 0.44 * k, (0.08 + 0.1 * f) * k, zz.crystal[1 % zz.crystal.length], 0);
       return;
     }
@@ -1248,5 +1357,5 @@
     fillRR(ctx, x - 0.88 * k, y - 0.86 * k, 0.22 * k, 0.22 * k, 0.11 * k, zone(z).light || '#8ff0d4');
   }
 
-  window.MineArt = { ZONES, zone, floorBackground, surfaceBackground, outdoor, buffer, machine, station, wallLamp, elevatorStage, shaftColumn, cabin, headframe, frontier, conduit, frostRig, shade, facePile, rockFace, timberFrame, drillCart, haulTrack, haulLoad, constructionSite, shaftLook, lookRig, storeRack };
+  window.MineArt = { ZONES, zone, floorBackground, surfaceBackground, outdoor, buffer, machine, station, wallLamp, elevatorStage, shaftColumn, cabin, headframe, liftDisplay, frontier, conduit, frostRig, shade, facePile, rockFace, timberFrame, drillCart, haulTrack, haulLoad, constructionSite, shaftLook, lookRig, storeRack };
 })();

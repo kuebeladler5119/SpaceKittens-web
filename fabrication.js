@@ -30,7 +30,14 @@ const GOODS = {
   crystalGel: { name: 'Kristallgel', icon: '◇', kind: 'intermediate', value: 70 },
   polymer: { name: 'Sternenpolymer', icon: '⬢', kind: 'product', value: 320 },
   // Beta 1.7 M9: the healed core's crystal (Orion, from core stage 2)
-  coreCrystal: { name: 'Kernkristall', icon: '✶', kind: 'product', value: 2000 }
+  coreCrystal: { name: 'Kernkristall', icon: '✶', kind: 'product', value: 2000 },
+  // Beta 1.9 M5: Glacies' cryo chain (the reference planet industry) and its cross-planet product with Pyra
+  coldPlate: { name: 'Kälteplatte', icon: '▩', kind: 'intermediate', value: 140 },
+  cryoCore: { name: 'Kryokern', icon: '❄', kind: 'product', value: 900 },
+  heatShield: { name: 'Hitzeschild', icon: '⛨', kind: 'product', value: 1700 },
+  // Beta 1.9 M6: modules combined from finds (Fundstücke) and chain products
+  resonanceLens: { name: 'Resonanzlinse', icon: '◉', kind: 'intermediate', value: 600 },
+  shieldProjector: { name: 'Schildprojektor', icon: '⬡', kind: 'product', value: 6000 }
 };
 const GOOD_IDS = Object.keys(GOODS);
 const GOODS_CAP = { raw: 300, intermediate: 60, product: 20 };
@@ -48,7 +55,17 @@ const RECIPES = {
   lubricant: { name: 'Funkel-Schmiermittel', out: { lubricant: 1 }, in: { resin: 4, scrap: 2 }, seconds: 15, uses: 'Sternenpolymer, Handel' },
   crystalGel: { name: 'Kristallgel', out: { crystalGel: 1 }, in: { resin: 5, raw: 25 }, seconds: 20, uses: 'Sternenpolymer, Handel' },
   polymer: { name: 'Sternenpolymer', out: { polymer: 1 }, in: { crystalGel: 2, lubricant: 1 }, seconds: 40, unlock: { recipe: 'crystalGel', made: 3 }, uses: 'Handel (Mekhanos zahlt am meisten)' },
-  coreCrystal: { name: 'Kernkristall', out: { coreCrystal: 1 }, in: { bars: 100, polymer: 1 }, seconds: 90, unlock: { core: 'crystal', stage: 2 }, uses: 'Den Kristallkern erwecken, Kernforschung, Handel' }
+  coreCrystal: { name: 'Kernkristall', out: { coreCrystal: 1 }, in: { bars: 100, polymer: 1 }, seconds: 90, unlock: { core: 'crystal', stage: 2 }, uses: 'Den Kristallkern erwecken, Kernforschung, Handel' },
+  // Beta 1.9 M5: Glacies' cryo chain: Frostquarz → Thermalzellen / Kühlmittel → Kälteplatte → Kryokern (with bars from
+  // the refinery), and the Hitzeschild on Pyra (a Kryokern flown in by freight + Glutlegierung). `only`: the worlds
+  // whose Fertigung can make it (the cold or the heat is there).
+  coldPlate: { name: 'Kälteplatte', out: { coldPlate: 1 }, in: { coolant: 1, plating: 1, frost: 2 }, seconds: 25, only: ['ice'], uses: 'Kryokern, Glacies-Kern, Handel (Pyra zahlt am meisten)' },
+  cryoCore: { name: 'Kryokern', out: { cryoCore: 1 }, in: { coldPlate: 2, cells: 1, bars: 20 }, seconds: 45, only: ['ice'], unlock: { recipe: 'coldPlate', made: 2 }, uses: 'Forschung Kühlkette, Glacies-Kern, Hitzeschild (Pyra), Handel' },
+  heatShield: { name: 'Hitzeschild', out: { heatShield: 1 }, in: { cryoCore: 1, emberAlloy: 3 }, seconds: 60, only: ['volcanic'], uses: 'Schiffsausbau Hitzeschild (Werft), Schildprojektor, Handel (Mekhanos zahlt am meisten)' },
+  // Beta 1.9 M6: finds as inputs – two Kristallgeoden focus Kristallgel into a lens (Orion); a Relikt der Großen Stille,
+  // a Hitzeschild and Mekhanos' Präzisionsbauteile become the ship's shield projector (Mekhanos)
+  resonanceLens: { name: 'Resonanzlinse', out: { resonanceLens: 1 }, in: { geode: 2, crystalGel: 2 }, seconds: 40, only: ['crystal'], uses: 'Forschung Resonanzlinsen, Handel' },
+  shieldProjector: { name: 'Schildprojektor', out: { shieldProjector: 1 }, in: { relic: 1, heatShield: 1, precisionParts: 4 }, seconds: 120, only: ['machine'], uses: 'Schiffsausbau Schildprojektor (Werft)' }
 };
 const RECIPE_IDS = Object.keys(RECIPES);
 const FAB_MODES = ['once', 'count', 'target', 'auto'];
@@ -64,11 +81,11 @@ const TRADERS = {
 };
 // Demand for manufactured goods per world (bounded 0.85–1.5 like the speciality markets).
 const GOODS_DEMAND = {
-  crystal: { plating: 0.9, coolant: 1.1, repairKit: 1.2, hullModule: 1.0, starFuel: 0.85, lubricant: 0.9, crystalGel: 0.85, polymer: 0.9 },
-  ice: { plating: 1.2, coolant: 0.85, repairKit: 1.0, hullModule: 1.1 },
-  volcanic: { plating: 1.1, coolant: 1.5, repairKit: 1.3, hullModule: 1.2 },
-  machine: { plating: 1.35, coolant: 1.2, repairKit: 1.0, hullModule: 1.45, lubricant: 1.4, polymer: 1.5 },
-  verdant: { plating: 1.0, coolant: 1.0, repairKit: 1.15, hullModule: 1.25 }
+  crystal: { plating: 0.9, coolant: 1.1, repairKit: 1.2, hullModule: 1.0, starFuel: 0.85, lubricant: 0.9, crystalGel: 0.85, polymer: 0.9, coldPlate: 1.0, cryoCore: 1.1, heatShield: 1.0 },
+  ice: { plating: 1.2, coolant: 0.85, repairKit: 1.0, hullModule: 1.1, coldPlate: 0.85, cryoCore: 0.85, heatShield: 1.2 },
+  volcanic: { plating: 1.1, coolant: 1.5, repairKit: 1.3, hullModule: 1.2, coldPlate: 1.5, cryoCore: 1.4, heatShield: 0.85 },
+  machine: { plating: 1.35, coolant: 1.2, repairKit: 1.0, hullModule: 1.45, lubricant: 1.4, polymer: 1.5, coldPlate: 1.2, cryoCore: 1.3, heatShield: 1.5 },
+  verdant: { plating: 1.0, coolant: 1.0, repairKit: 1.15, hullModule: 1.25, coldPlate: 1.0, cryoCore: 1.0, heatShield: 1.1 }
 };
 // Selling floods a market: each unit adds 1/depth to its saturation; the price falls to at most half; it recovers with a
 // time constant of 10 minutes.
@@ -181,12 +198,14 @@ function fabLines(planet) {
 function recipeUnlocked(id, planet = state.activePlanet) {
   const r = RECIPES[id];
   if (!r || !fabOpen(planet)) return false;
+  if (r.only && !r.only.includes(PLANETS[planet]?.id)) return false; // Beta 1.9 M5: made only where the cold/heat is
   // Beta 1.7 M9: a recipe can be the reward of a core stage (on the core's planet)
   if (r.unlock?.core) return typeof coreStage === 'function' && coreStage(r.unlock.core) >= r.unlock.stage && planet === CORES[r.unlock.core].planet;
   return !r.unlock || (state.fabStats?.made?.[r.unlock.recipe] || 0) >= r.unlock.made;
 }
 function recipeLockText(id, planet = state.activePlanet) {
   const r = RECIPES[id];
+  if (r.only && !r.only.includes(PLANETS[planet]?.id)) return 'Nur auf ' + r.only.map(id => PLANETS.find(p => p.id === id)?.name || id).join(', ');
   if (!fabOpen(planet)) return 'Braucht ein Produktionsgebäude in dieser Kolonie (z. B. Raffinerie)';
   if (r.unlock?.core) return 'Freischaltung: ' + CORES[r.unlock.core].name + ' Stufe ' + r.unlock.stage + ' (Orion)';
   if (r.unlock) return 'Freischaltung: ' + r.unlock.made + '× ' + RECIPES[r.unlock.recipe].name + ' herstellen (' + Math.floor(state.fabStats?.made?.[r.unlock.recipe] || 0) + '/' + r.unlock.made + ')';
@@ -227,6 +246,8 @@ function fabLog(planet, entry) {
 // the colony holds some (e.g. brought by freight)
 function recipeAvailableHere(id, planet = state.activePlanet) {
   // (only resin: the older recipes keep showing everywhere, as before)
+  // Beta 1.9 M5: a planet-bound recipe shows only on its worlds
+  if (RECIPES[id]?.only && !RECIPES[id].only.includes(PLANETS[planet]?.id)) return false;
   return Object.keys(RECIPES[id]?.in || {}).every(input => input !== 'resin' || MATERIALS.resin.planets.includes(PLANETS[planet]?.id) || fabStock(planet, input) > 0);
 }
 // Beta 1.7 M5: Sternentreibstoff fills the ship's tank. Automatically only while the tank is below half (a reserve for
