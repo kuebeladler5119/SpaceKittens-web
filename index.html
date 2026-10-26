@@ -17,6 +17,15 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- R3: shown only when styles.css did not load (an HTML preview, a copy of index.html without its folder): the
+         stylesheet hides it, so a working page never shows it -->
+    <div id="loadHint" role="alert" style="margin: 12px; padding: 14px 16px; border-radius: 12px; background: #2a2365; color: #fff4e2; font: 15px/1.45 system-ui, sans-serif">
+      <b style="display: block; font-size: 17px; margin-bottom: 6px">Space Kittens konnte seine Grafik nicht laden.</b>
+      Hier ist nur das rohe HTML zu sehen – zum Beispiel in einer Datei-Vorschau oder bei einer Kopie der index.html ohne
+      ihren Ordner. Zum Spielen im Projektordner <b>start-game.cmd</b> doppelklicken (oder <code>npm start</code>) und
+      <b>http://127.0.0.1:4173</b> öffnen. Die Friends-Beta läuft unter
+      <a style="color: #8ff0d4" href="https://kuebeladler5119.github.io/SpaceKittens-web/">kuebeladler5119.github.io/SpaceKittens-web</a>.
+    </div>
     <main class="app-shell" id="appShell">
       <header class="topbar">
         <div class="brand">
@@ -562,12 +571,14 @@
         ><button id="introSkip" class="text-button">Einführung überspringen</button>
       </div>
     </div>
-    <div class="modal hidden" id="dailyModal">
+    <div class="modal hidden" id="dailyModal" role="dialog" aria-modal="true" aria-label="Tägliche Versorgung">
       <div class="modal-box reward-box">
-        <button class="close-daily">×</button><span>TÄGLICHE VERSORGUNG</span>
+        <button class="modal-close close-daily" aria-label="Schließen">×</button><span>TÄGLICHE VERSORGUNG</span>
         <h2>Tag <b id="dailyDay">1</b></h2>
         <div class="reward-orb">✦</div>
         <p>Deine Crew hat Vorräte bereitgestellt.</p>
+        <ol class="daily-track" id="dailyTrack" aria-label="Sieben Tage Versorgung"></ol>
+        <p class="daily-reward" id="dailyRewardText"></p>
         <button id="claimDaily">BELOHNUNG ABHOLEN</button>
       </div>
     </div>
@@ -796,13 +807,28 @@
           <b class="settings-label">SPIELSTAND</b>
           <p class="settings-note" id="saveStatus">Automatisch gespeichert.</p>
           <div class="settings-actions">
+            <button id="exportFile">Als Datei sichern</button>
+            <button id="importFileButton">Datei laden</button>
+            <input type="file" id="importFile" accept=".json,application/json,text/plain" hidden />
+          </div>
+          <div class="settings-actions save-code-actions">
             <button id="exportSave">Sicherungscode kopieren</button>
             <button id="importSaveToggle">Code einfügen</button>
           </div>
           <div class="import-panel hidden" id="importPanel">
             <textarea id="importCode" rows="3" placeholder="NH1.…" aria-label="Sicherungscode"></textarea>
-            <button id="importSave">Spielstand laden</button>
+            <button id="importSave">Code prüfen</button>
           </div>
+          <div class="import-panel import-confirm hidden" id="importConfirm" role="alertdialog" aria-labelledby="importConfirmTitle">
+            <b id="importConfirmTitle">Spielstand ersetzen?</b>
+            <p class="settings-note" id="importSummary"></p>
+            <button id="importBackupFirst">Aktuellen Stand erst als Datei sichern</button>
+            <div class="settings-actions">
+              <button id="importCancel">Abbrechen</button>
+              <button id="importConfirmYes" class="import-replace">Ersetzen</button>
+            </div>
+          </div>
+          <button id="undoImport" class="undo-import hidden">Stand vor dem letzten Import zurückholen</button>
         </div>
         <div class="settings-group hidden" id="betaGroup">
           <b class="settings-label">FRIENDS BETA</b>
@@ -998,6 +1024,12 @@
     <script src="mobile-ux.js"></script>
     <script src="world-shell.js"></script>
     <script src="menu-ui.js"></script>
+    <script src="galaxy.js"></script>
+    <script src="managers2.js"></script>
+    <script src="cargo-drone.js"></script>
+    <script src="chest-keys.js"></script>
+    <script src="galaxy-pass.js"></script>
+    <script src="galaxy-trials.js"></script>
     <script src="research-ui.js"></script>
     <script src="artifacts-ui.js"></script>
     <script src="wardrobe.js"></script>
@@ -1009,6 +1041,9 @@
     <script src="gear-loop.js"></script>
     <script src="combat-control.js"></script>
     <script src="combat-tutorial.js"></script>
+    <script src="rematch-orders.js"></script>
+    <script src="missions.js"></script>
+    <script src="prestige-fx.js"></script>
     <script src="lore.js"></script>
     <script src="platform.js"></script>
     <script src="frame-pacing.js"></script>
