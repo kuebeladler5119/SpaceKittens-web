@@ -1,6 +1,6 @@
 // PWA offline support. Network-first so updates are picked up immediately; cache is the offline fallback.
 // Not registered inside the Android app (Capacitor serves files locally) or on local dev hosts.
-const CACHE = 'space-kittens-fb-610a97bcc300';
+const CACHE = 'space-kittens-fb-ce89aea789d7';
 const CORE = [
   "./arena-ui.js",
   "./arena.js",
@@ -131,10 +131,19 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then(cache => Promise.allSettled(CORE.map(url => cache.add(url))))
+      .then(cache => Promise.allSettled(CORE.map(url => cache.add(new Request(url, { cache: 'reload' })))))
       .then(() => self.skipWaiting())
   );
 });
+
+// R7: the browser's HTTP cache is never trusted. GitHub Pages sends every file with max-age=600, so a plain fetch()
+// could hand back the previous build for ten minutes after a deployment: the precache above bypasses it ('reload'),
+// and every request revalidates ('no-cache': a small 304 when nothing changed). A navigation request cannot be
+// copied with options, so it is fetched by its URL (and, after a redirect, as it came).
+const fresh = request =>
+  request.mode === 'navigate'
+    ? fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(response => (response.redirected ? fetch(request) : response))
+    : fetch(request, { cache: 'no-cache' });
 
 self.addEventListener('activate', event => {
   event.waitUntil(
@@ -150,7 +159,7 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
   event.respondWith(
-    fetch(request)
+    fresh(request)
       .then(response => {
         if (response.ok) {
           const copy = response.clone();
